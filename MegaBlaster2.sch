@@ -936,22 +936,20 @@ Text GLabel 3450 3650 2    50   Input ~ 0
 NEOPIX
 Text GLabel 3450 3850 2    50   Input ~ 0
 SWO
-Text GLabel 2050 3350 0    50   Input ~ 0
-D0
 Text GLabel 2050 3450 0    50   Input ~ 0
-D1
-Text GLabel 2050 3550 0    50   Input ~ 0
-D2
-Text GLabel 2050 3650 0    50   Input ~ 0
-D3
-Text GLabel 2050 3750 0    50   Input ~ 0
-D4
-Text GLabel 2050 3850 0    50   Input ~ 0
-D5
-Text GLabel 2050 3950 0    50   Input ~ 0
 D6
+Text GLabel 2050 3550 0    50   Input ~ 0
+D5
+Text GLabel 2050 3650 0    50   Input ~ 0
+D4
+Text GLabel 2050 3750 0    50   Input ~ 0
+D3
+Text GLabel 2050 3850 0    50   Input ~ 0
+D2
+Text GLabel 2050 3950 0    50   Input ~ 0
+D1
 Text GLabel 2050 4050 0    50   Input ~ 0
-D7
+D0
 Text GLabel 2050 3250 0    50   Input ~ 0
 SS
 $Comp
@@ -1552,7 +1550,7 @@ F 3 "" H 6450 6600 50  0001 C CNN
 	1    6450 6600
 	1    0    0    -1  
 $EndComp
-Text GLabel 3450 3950 2    50   Input ~ 0
+Text GLabel 2050 2450 0    50   Input ~ 0
 RAM_CS
 Text GLabel 6950 5800 2    50   Input ~ 0
 RAM_CS
@@ -3224,4 +3222,32 @@ F 3 " ~" H 2000 9650 50  0001 C CNN
 	1    1850 9700
 	1    0    0    -1  
 $EndComp
+$Comp
+L power:GND #PWR088
+U 1 1 5FE2674E
+P 14300 9650
+F 0 "#PWR088" H 14300 9400 50  0001 C CNN
+F 1 "GND" H 14305 9477 50  0000 C CNN
+F 2 "" H 14300 9650 50  0001 C CNN
+F 3 "" H 14300 9650 50  0001 C CNN
+	1    14300 9650
+	1    0    0    -1  
+$EndComp
+$Comp
+L Connector:TestPoint TP6
+U 1 1 5FE27B13
+P 14300 9450
+F 0 "TP6" H 14358 9568 50  0000 L CNN
+F 1 "TestPoint" H 14358 9477 50  0000 L CNN
+F 2 "TestPoint:TestPoint_Pad_2.0x2.0mm" H 14500 9450 50  0001 C CNN
+F 3 "~" H 14500 9450 50  0001 C CNN
+	1    14300 9450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	14300 9450 14300 9650
+Text GLabel 2050 3350 0    50   Input ~ 0
+D7
+Text GLabel 3450 3550 2    50   Input ~ 0
+PSG_WE
 $EndSCHEMATC

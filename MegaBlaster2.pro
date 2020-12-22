@@ -1,4 +1,4 @@
-update=12/20/2020 6:22:48 PM
+update=12/21/2020 2:34:32 PM
 version=1
 last_client=kicad
 [general]
@@ -240,6 +240,17 @@ Name=Default
 Clearance=0.2
 TrackWidth=0.25
 ViaDiameter=0.8
+ViaDrill=0.4
+uViaDiameter=0.3
+uViaDrill=0.1
+dPairWidth=0.2
+dPairGap=0.25
+dPairViaGap=0.25
+[pcbnew/Netclasses/1]
+Name=THICC
+Clearance=0.2
+TrackWidth=1
+ViaDiameter=1
 ViaDrill=0.4
 uViaDiameter=0.3
 uViaDrill=0.1

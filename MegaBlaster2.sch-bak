@@ -55,17 +55,6 @@ Saturday, December 12 2020
 Text Notes 15450 11050 0    50   ~ 0
 1
 $Comp
-L Connector:USB_B J1
-U 1 1 5FD5BB2B
-P 1850 9700
-F 0 "J1" H 1907 10167 50  0000 C CNN
-F 1 "USB_B" H 1907 10076 50  0000 C CNN
-F 2 "Connector_USB:USB_B_Lumberg_2411_02_Horizontal" H 2000 9650 50  0001 C CNN
-F 3 " ~" H 2000 9650 50  0001 C CNN
-	1    1850 9700
-	1    0    0    -1  
-$EndComp
-$Comp
 L power:GND #PWR08
 U 1 1 5FD5DABD
 P 1850 10100
@@ -447,8 +436,6 @@ Wire Wire Line
 	2900 9650 3250 9650
 Wire Wire Line
 	3250 9650 3250 9700
-Wire Wire Line
-	3250 9700 3450 9700
 Connection ~ 3450 9700
 $Comp
 L Switch:SW_SPDT SW1
@@ -949,22 +936,20 @@ Text GLabel 3450 3650 2    50   Input ~ 0
 NEOPIX
 Text GLabel 3450 3850 2    50   Input ~ 0
 SWO
-Text GLabel 2050 3350 0    50   Input ~ 0
-D0
 Text GLabel 2050 3450 0    50   Input ~ 0
-D1
-Text GLabel 2050 3550 0    50   Input ~ 0
-D2
-Text GLabel 2050 3650 0    50   Input ~ 0
-D3
-Text GLabel 2050 3750 0    50   Input ~ 0
-D4
-Text GLabel 2050 3850 0    50   Input ~ 0
-D5
-Text GLabel 2050 3950 0    50   Input ~ 0
 D6
+Text GLabel 2050 3550 0    50   Input ~ 0
+D5
+Text GLabel 2050 3650 0    50   Input ~ 0
+D4
+Text GLabel 2050 3750 0    50   Input ~ 0
+D3
+Text GLabel 2050 3850 0    50   Input ~ 0
+D2
+Text GLabel 2050 3950 0    50   Input ~ 0
+D1
 Text GLabel 2050 4050 0    50   Input ~ 0
-D7
+D0
 Text GLabel 2050 3250 0    50   Input ~ 0
 SS
 $Comp
@@ -1999,11 +1984,11 @@ F 3 "~" H 12950 3200 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Text GLabel 12050 3200 0    50   Input ~ 0
-MOL
+MOR
 Wire Wire Line
 	12050 3200 12350 3200
 Text GLabel 12050 3000 0    50   Input ~ 0
-MOR
+MOL
 Wire Wire Line
 	12050 3000 12250 3000
 $Comp
@@ -2099,13 +2084,13 @@ Wire Wire Line
 Wire Wire Line
 	12250 2450 12250 3000
 Text GLabel 12650 3100 0    50   Input ~ 0
-BPL
+BPR
 Text GLabel 12650 3300 0    50   Input ~ 0
-BPR
-Text GLabel 12750 2600 3    50   Input ~ 0
 BPL
-Text GLabel 12750 2450 1    50   Input ~ 0
+Text GLabel 12750 2600 3    50   Input ~ 0
 BPR
+Text GLabel 12750 2450 1    50   Input ~ 0
+BPL
 Wire Wire Line
 	13250 3100 13400 3100
 Wire Wire Line
@@ -2371,9 +2356,9 @@ $EndComp
 Wire Wire Line
 	15650 2000 15650 1950
 Connection ~ 15650 1950
-Text GLabel 14350 2600 2    50   Input ~ 0
-SELECT_L
 Text GLabel 14350 2450 2    50   Input ~ 0
+SELECT_L
+Text GLabel 14350 2600 2    50   Input ~ 0
 SELECT_R
 Text GLabel 12500 4700 0    50   Input ~ 0
 SELECT_L
@@ -3224,4 +3209,45 @@ F 3 "~" H 14900 9350 50  0001 C CNN
 	1    14900 9350
 	1    0    0    -1  
 $EndComp
+Wire Wire Line
+	3250 9700 3450 9700
+$Comp
+L Connector:USB_B J1
+U 1 1 5FD5BB2B
+P 1850 9700
+F 0 "J1" H 1907 10167 50  0000 C CNN
+F 1 "USB_B" H 1907 10076 50  0000 C CNN
+F 2 "Connector_USB:USB_B_Lumberg_2411_02_Horizontal" H 2000 9650 50  0001 C CNN
+F 3 " ~" H 2000 9650 50  0001 C CNN
+	1    1850 9700
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:GND #PWR088
+U 1 1 5FE2674E
+P 14300 9650
+F 0 "#PWR088" H 14300 9400 50  0001 C CNN
+F 1 "GND" H 14305 9477 50  0000 C CNN
+F 2 "" H 14300 9650 50  0001 C CNN
+F 3 "" H 14300 9650 50  0001 C CNN
+	1    14300 9650
+	1    0    0    -1  
+$EndComp
+$Comp
+L Connector:TestPoint TP6
+U 1 1 5FE27B13
+P 14300 9450
+F 0 "TP6" H 14358 9568 50  0000 L CNN
+F 1 "TestPoint" H 14358 9477 50  0000 L CNN
+F 2 "TestPoint:TestPoint_Pad_2.0x2.0mm" H 14500 9450 50  0001 C CNN
+F 3 "~" H 14500 9450 50  0001 C CNN
+	1    14300 9450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	14300 9450 14300 9650
+Text GLabel 2050 3350 0    50   Input ~ 0
+D7
+Text GLabel 3450 3550 2    50   Input ~ 0
+PSG_WE
 $EndSCHEMATC
