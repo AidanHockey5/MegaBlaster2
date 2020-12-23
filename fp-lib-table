@@ -9,4 +9,5 @@
   (lib (name midicon)(type KiCad)(uri ${KIPRJMOD}/libs/midicon.pretty)(options "")(descr ""))
   (lib (name Rotary_Encoder)(type KiCad)(uri ${KIPRJMOD}/libs/Rotary_Encoder.pretty)(options "")(descr ""))
   (lib (name custom_oled)(type KiCad)(uri ${KIPRJMOD}/libs/custom_oled.pretty)(options "")(descr ""))
+  (lib (name Art)(type KiCad)(uri ${KIPRJMOD}/Art)(options "")(descr ""))
 )

@@ -430,40 +430,6 @@ F 3 "" H 7000 9900 50  0001 C CNN
 	1    7000 9900
 	1    0    0    -1  
 $EndComp
-Text GLabel 2900 9650 0    50   Input ~ 0
-SHUTDOWN
-Wire Wire Line
-	2900 9650 3250 9650
-Wire Wire Line
-	3250 9650 3250 9700
-Connection ~ 3450 9700
-$Comp
-L Switch:SW_SPDT SW1
-U 1 1 5FD6F70F
-P 2150 8700
-F 0 "SW1" H 2150 8985 50  0000 C CNN
-F 1 "SW_SPDT" H 2150 8894 50  0000 C CNN
-F 2 "Button_Switch_THT:SW_Slide_1P2T_CK_OS102011MS2Q" H 2150 8700 50  0001 C CNN
-F 3 "~" H 2150 8700 50  0001 C CNN
-	1    2150 8700
-	1    0    0    -1  
-$EndComp
-Text GLabel 2350 8600 2    50   Input ~ 0
-SHUTDOWN
-$Comp
-L power:GND #PWR07
-U 1 1 5FD71BF4
-P 1850 8700
-F 0 "#PWR07" H 1850 8450 50  0001 C CNN
-F 1 "GND" H 1855 8527 50  0000 C CNN
-F 2 "" H 1850 8700 50  0001 C CNN
-F 3 "" H 1850 8700 50  0001 C CNN
-	1    1850 8700
-	1    0    0    -1  
-$EndComp
-Wire Wire Line
-	1850 8700 1950 8700
-NoConn ~ 2350 8800
 Text GLabel 1150 4750 0    50   Input ~ 0
 RESET
 Wire Wire Line
@@ -2922,34 +2888,6 @@ F 3 "~" H 13550 7750 50  0001 C CNN
 	1    13550 7750
 	0    -1   -1   0   
 $EndComp
-Wire Wire Line
-	13500 7450 13650 7450
-$Comp
-L Device:R_Small R23
-U 1 1 601A41B3
-P 13750 7450
-F 0 "R23" V 13554 7450 50  0000 C CNN
-F 1 "10R" V 13645 7450 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric" H 13750 7450 50  0001 C CNN
-F 3 "~" H 13750 7450 50  0001 C CNN
-	1    13750 7450
-	0    1    1    0   
-$EndComp
-$Comp
-L Device:R_Small R24
-U 1 1 601A59C3
-P 13750 7750
-F 0 "R24" V 13554 7750 50  0000 C CNN
-F 1 "10R" V 13645 7750 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric" H 13750 7750 50  0001 C CNN
-F 3 "~" H 13750 7750 50  0001 C CNN
-	1    13750 7750
-	0    1    1    0   
-$EndComp
-Wire Wire Line
-	13850 7450 14050 7450
-Wire Wire Line
-	13850 7750 14350 7750
 $Comp
 L Device:R_Small R27
 U 1 1 601C61C1
@@ -3209,8 +3147,6 @@ F 3 "~" H 14900 9350 50  0001 C CNN
 	1    14900 9350
 	1    0    0    -1  
 $EndComp
-Wire Wire Line
-	3250 9700 3450 9700
 $Comp
 L Connector:USB_B J1
 U 1 1 5FD5BB2B
@@ -3250,4 +3186,8 @@ Text GLabel 2050 3350 0    50   Input ~ 0
 D7
 Text GLabel 3450 3550 2    50   Input ~ 0
 PSG_WE
+Wire Wire Line
+	13500 7450 14050 7450
+Wire Wire Line
+	13650 7750 14350 7750
 $EndSCHEMATC
