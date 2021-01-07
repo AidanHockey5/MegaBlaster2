@@ -66,10 +66,11 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
 bool isOledOn = true;
 
 //Buttons
-// const int prev_btn = PB11;
-// const int rand_btn = PB10;
-// const int next_btn = PB1;
-// const int option_btn = PA3;
+const int prev_btn = PORT_PB00;
+const int rand_btn = PORT_PB01;
+const int next_btn = PORT_PB04;
+const int option_btn = PORT_PB05;
+const int select_btn = PORT_PB09;
 
 //SD & File Streaming
 SdFat SD;
@@ -105,11 +106,32 @@ void setup()
 
   resetSleepSpin();
 
-  //Buttons
-  // pinMode(prev_btn, INPUT_PULLUP);
-  // pinMode(rand_btn, INPUT_PULLUP);
-  // pinMode(next_btn, INPUT_PULLUP);
-  // pinMode(option_btn, INPUT_PULLUP);
+  //Button configs
+  //Group 1 is port B, PINCFG just wants the literal pin number on the port, DIRCLR and OUTSET want the masked PORT_XX00 *not* the PIN_XX00
+  //Prev button input pullup
+  PORT->Group[1].PINCFG[0].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  PORT->Group[1].DIRCLR.reg = PORT_PB00;
+  PORT->Group[1].OUTSET.reg = PORT_PB00;
+
+  //Rand button input pullup
+  PORT->Group[1].PINCFG[1].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  PORT->Group[1].DIRCLR.reg = PORT_PB01;
+  PORT->Group[1].OUTSET.reg = PORT_PB01;
+
+  //Next button input pullup
+  PORT->Group[1].PINCFG[4].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  PORT->Group[1].DIRCLR.reg = PORT_PB04;
+  PORT->Group[1].OUTSET.reg = PORT_PB04;
+
+  //Option button input pullup
+  PORT->Group[1].PINCFG[5].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
+  PORT->Group[1].DIRCLR.reg = PORT_PB05;
+  PORT->Group[1].OUTSET.reg = PORT_PB05;
+
+  //Select button input pullup
+  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
+  PORT->Group[1].DIRCLR.reg = PORT_PB09;
+  PORT->Group[1].OUTSET.reg = PORT_PB09;
 
   //COM
   Wire.begin();
@@ -448,62 +470,67 @@ void handleSerialIn()
 bool buttonLock = false;
 void handleButtons()
 {
-  // bool togglePlaymode = false;
-  // uint32_t count = 0;
-  
-  // if(!digitalRead(next_btn))
-  //   startTrack(NEXT);
-  // if(!digitalRead(prev_btn))
-  //   startTrack(PREV);
-  // if(!digitalRead(rand_btn))
-  //   startTrack(RND);
-  // if(!digitalRead(option_btn))
-  //   togglePlaymode = true;
-  // else
-  //   buttonLock = false;
-  // while(!digitalRead(option_btn))
-  // {
-  //   pauseISR();
-  //   if(count >= 100) 
-  //   {
-  //     //toggle OLED after one second of holding OPTION button
-  //     isOledOn = !isOledOn;
-  //     drawOLEDTrackInfo();
-  //     togglePlaymode = false;
-  //     buttonLock = true;
-  //     break;
-  //   } 
-  //   delay(10);
-  //   count++;
-  // }
-  // if(buttonLock)
-  // {
-  //   togglePlaymode = false;
-  //   setISR();
-  // }
+//Direct IO examples for reading pins
+//if (REG_PORT_IN0 & PORT_PA19)  // if (digitalRead(12) == HIGH)
+//if (!(REG_PORT_IN0 | ~PORT_PA19)) // if (digitalRead(12) == LOW) FOR NON-PULLED PINS!
+//if(!(REG_PORT_IN1 & next_btn)) //LOW for PULLED PINS
 
-  // if(togglePlaymode)
-  // {
-  //   togglePlaymode = false;
-  //   if(playMode == SHUFFLE)
-  //     playMode = LOOP;
-  //   else if(playMode == LOOP)
-  //     playMode = IN_ORDER;
-  //   else if(playMode == IN_ORDER)
-  //     playMode = SHUFFLE;
+  bool togglePlaymode = false;
+  uint32_t count = 0;
 
-  //   if(playMode == LOOP)
-  //   {
-  //     VGMEngine.maxLoops = 0xFFFF;
-  //   }
-  //   else
-  //   {
-  //     VGMEngine.maxLoops = maxLoops;
-  //   }
+  if(!(REG_PORT_IN1 & next_btn)) //Check if buttons are LOW indicating that they are pressed
+    startTrack(NEXT);            //Remember, these button pins have pullups enabled on them
+  if(!(REG_PORT_IN1 & prev_btn))
+    startTrack(PREV);
+  if(!(REG_PORT_IN1 & rand_btn))
+    startTrack(RND);
+  if(!(REG_PORT_IN1 & option_btn))
+    togglePlaymode = true;
+  else
+    buttonLock = false;
+  while(!(REG_PORT_IN1 & option_btn))
+  {
+    pauseISR();
+    if(count >= 100) 
+    {
+      //toggle OLED after one second of holding OPTION button
+      isOledOn = !isOledOn;
+      drawOLEDTrackInfo();
+      togglePlaymode = false;
+      buttonLock = true;
+      break;
+    } 
+    delay(10);
+    count++;
+  }
+  if(buttonLock)
+  {
+    togglePlaymode = false;
+    setISR();
+  }
+
+  if(togglePlaymode)
+  {
+    togglePlaymode = false;
+    if(playMode == SHUFFLE)
+      playMode = LOOP;
+    else if(playMode == LOOP)
+      playMode = IN_ORDER;
+    else if(playMode == IN_ORDER)
+      playMode = SHUFFLE;
+
+    if(playMode == LOOP)
+    {
+      VGMEngine.maxLoops = 0xFFFF;
+    }
+    else
+    {
+      VGMEngine.maxLoops = maxLoops;
+    }
     
-  //   drawOLEDTrackInfo();
-  //   setISR();
-  // }
+    drawOLEDTrackInfo();
+    setISR();
+  }
 }
 
 void loop()
