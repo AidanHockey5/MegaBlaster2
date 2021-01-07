@@ -22,17 +22,8 @@ Bus::Bus(uint8_t _pins[8])
 //Generic parallel write function. Might be slow on most hardware, but easy to use if you have arb. bus pins
 void Bus::write(uint8_t data)
 {
-    //data = ~data;
-    // GPIOB->regs->BSRR = (1U << 8) << (16 * ((data >> 0)&1));
-    // GPIOB->regs->BSRR = (1U << 9) << (16 * ((data >> 1)&1));
-    // GPIOC->regs->BSRR = (1U << 13) << (16 * ((data >> 2)&1));
-    // GPIOC->regs->BSRR = (1U << 14) << (16 * ((data >> 3)&1));
-    // GPIOC->regs->BSRR = (1U << 15) << (16 * ((data >> 4)&1));
-    // GPIOA->regs->BSRR = (1U << 0) << (16 * ((data >> 5)&1));
-    // GPIOA->regs->BSRR = (1U << 1) << (16 * ((data >> 6)&1));
-    // GPIOA->regs->BSRR = (1U << 2) << (16 * ((data >> 7)&1));
     for(uint8_t i = 0; i<8; i++)
-       digitalWrite(pins[i], ((data >> i)&1));
+       digitalWrite(pins[i], ((data >> i)&1)); //Turns out, there really isn't that much of a faster way to do this on SAMD lol
 }
 
 void Bus::prepare()

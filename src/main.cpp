@@ -14,6 +14,10 @@
 #include "SerialUtils.h"
 #include "clocks.h"
 
+extern "C" {
+  #include "trngFunctions.h" //True random number generation
+}
+
 #include "VGMEngine.h"
 
 //Debug variables
@@ -100,6 +104,11 @@ void setup()
   si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0);
   si5351.set_freq(7670454ULL*100ULL, SI5351_CLK0); //CLK0 YM
   si5351.set_freq(3579545ULL*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
+
+  //RNG
+  trngInit();
+  randomSeed(trngGetRandomNumber());
+
   //DEBUG
   pinMode(DEBUG_LED, OUTPUT);
   digitalWrite(DEBUG_LED, LOW);
@@ -336,7 +345,6 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
     case RND:
     {
-      randomSeed(micros());
       uint32_t randomFile = currentFileNumber;
       if(numberOfFiles > 1)
       {
