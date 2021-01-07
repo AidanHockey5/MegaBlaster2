@@ -430,40 +430,6 @@ F 3 "" H 7000 9900 50  0001 C CNN
 	1    7000 9900
 	1    0    0    -1  
 $EndComp
-Text GLabel 2900 9650 0    50   Input ~ 0
-SHUTDOWN
-Wire Wire Line
-	2900 9650 3250 9650
-Wire Wire Line
-	3250 9650 3250 9700
-Connection ~ 3450 9700
-$Comp
-L Switch:SW_SPDT SW1
-U 1 1 5FD6F70F
-P 2150 8700
-F 0 "SW1" H 2150 8985 50  0000 C CNN
-F 1 "SW_SPDT" H 2150 8894 50  0000 C CNN
-F 2 "Button_Switch_THT:SW_Slide_1P2T_CK_OS102011MS2Q" H 2150 8700 50  0001 C CNN
-F 3 "~" H 2150 8700 50  0001 C CNN
-	1    2150 8700
-	1    0    0    -1  
-$EndComp
-Text GLabel 2350 8600 2    50   Input ~ 0
-SHUTDOWN
-$Comp
-L power:GND #PWR07
-U 1 1 5FD71BF4
-P 1850 8700
-F 0 "#PWR07" H 1850 8450 50  0001 C CNN
-F 1 "GND" H 1855 8527 50  0000 C CNN
-F 2 "" H 1850 8700 50  0001 C CNN
-F 3 "" H 1850 8700 50  0001 C CNN
-	1    1850 8700
-	1    0    0    -1  
-$EndComp
-Wire Wire Line
-	1850 8700 1950 8700
-NoConn ~ 2350 8800
 Text GLabel 1150 4750 0    50   Input ~ 0
 RESET
 Wire Wire Line
@@ -3181,8 +3147,6 @@ F 3 "~" H 14900 9350 50  0001 C CNN
 	1    14900 9350
 	1    0    0    -1  
 $EndComp
-Wire Wire Line
-	3250 9700 3450 9700
 $Comp
 L Connector:USB_B J1
 U 1 1 5FD5BB2B
