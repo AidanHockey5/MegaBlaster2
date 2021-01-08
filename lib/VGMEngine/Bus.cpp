@@ -19,11 +19,19 @@ Bus::Bus(uint8_t _pins[8])
     memcpy(pins, _pins, sizeof(uint8_t)*8);
 }
 
-//Generic parallel write function. Might be slow on most hardware, but easy to use if you have arb. bus pins
 void Bus::write(uint8_t data)
 {
-    for(uint8_t i = 0; i<8; i++)
-       digitalWrite(pins[i], ((data >> i)&1)); //Turns out, there really isn't that much of a faster way to do this on SAMD lol
+    //Optimized for MEGABLASTER 2 ARM CPU, NOT AT ALL PORTABLE
+    uint32_t drev;                                      //Reversed byte for swapped bus (easier for PCB layout)
+    __asm__("rbit %0, %1\n" : "=r"(drev) : "r"(data));  //use ARM ASM for supa' speed swapping bit order. 32 bit operation
+    data = drev >> 24;                                  //Copy reversed byte from drev back to data after pushing over 24 bits
+    uint32_t p = REG_PORT_OUT0;                         //Grab current state of entire PORTA reg
+    p &= 0b11111000000001111111111111111;               //Mask out everything except our databus
+    p |= data << 16;                                    //Insert our data
+    REG_PORT_OUT0 = p;                                  //Write the entire port over with our new data inserted
+
+    // for(uint8_t i = 0; i<8; i++)
+    //    digitalWrite(pins[i], ((data >> i)&1)); //slow but portable way
 }
 
 void Bus::prepare()
