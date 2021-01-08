@@ -1,9 +1,10 @@
 #include <Arduino.h>
+#include "clocks.h"
 
 #ifndef _SPIN_SLEEP_H_
 #define _SPIN_SLEEP_H_
 
-#define DRIVER_CLOCK_RATE 72000000
+#define DRIVER_CLOCK_RATE 120000000
 
 #define DEMCR (*((volatile uint32_t *)0xE000EDFC))
 #define DWT_CTRL (*(volatile uint32_t *)0xe0001000)

@@ -2,6 +2,7 @@
 #define _SN76489_H_
 #include "Bus.h"
 #include "SpinSleep.h"
+#include "clocks.h"
 
 class SN76489
 {
@@ -13,7 +14,7 @@ public:
     void setClock(uint32_t frq);
 private:
     //ChipClock* clk;
-    uint32_t clkfrq;
+    uint32_t clkfrq = NTSC_COLORBURST;
     Bus* bus;
     uint8_t WE;
     unsigned char psgFrqLowByte = 0;

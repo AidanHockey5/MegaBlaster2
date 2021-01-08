@@ -193,13 +193,17 @@ bool VGMEngineClass::load(bool singleChunk)
 
 void VGMEngineClass::chipSetup()
 {
+    si5351.reset();
+    delay(10);
     #if ENABLE_SN76489
-    //si5351.set_freq((unsigned long)header.sn76489Clock*100ULL, SI5351_CLK1);
+    sn76489->setClock(header.sn76489Clock);
+    si5351.set_freq(header.sn76489Clock*SI5351_FREQ_MULT, SI5351_CLK1);
     delay(10);
     sn76489->reset();
     #endif
     #if ENABLE_YM2612
-    //si5351.set_freq((unsigned long)header.ym2612Clock*100ULL, SI5351_CLK0); //CLK0 YM
+    ym2612->setClock(header.ym2612Clock);
+    si5351.set_freq(header.ym2612Clock*SI5351_FREQ_MULT, SI5351_CLK0); //CLK0 YM
     delay(10);
     ym2612->reset();
     #endif

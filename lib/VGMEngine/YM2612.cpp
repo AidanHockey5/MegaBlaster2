@@ -31,43 +31,36 @@ YM2612::YM2612(Bus* _bus, uint8_t _CS, uint8_t _RD, uint8_t _WR, uint8_t _A0, ui
 
 void YM2612::write(uint8_t addr, uint8_t data, bool a1)
 {
-    digitalWrite(A1, a1);
-    digitalWrite(A0, LOW);
+    //OPTIMIZED FOR MB2 ARM CPU, NOT PORTABLE!
+    a1 == true ? REG_PORT_OUTSET1 = PORT_PB14 : REG_PORT_OUTCLR1 = PORT_PB14; //A1 CHECK
+    REG_PORT_OUTCLR1 = PORT_PB13; //A0 LOW
     nop;
     bus->write(addr);
-    digitalWrite(CS, LOW);
-    digitalWrite(WR, LOW);
+    REG_PORT_OUTCLR1 = PORT_PB16; //CS LOW
+    REG_PORT_OUTCLR1 = PORT_PB15; //WR LOW
     delayMicroseconds(2);
-    digitalWrite(WR, HIGH);
-    digitalWrite(CS, HIGH);
-    digitalWrite(A0, HIGH);
+    //sleepClocks(NTSC_YMCLK, 17);
+    REG_PORT_OUTSET1 = PORT_PB15; //WR HIGH
+    REG_PORT_OUTSET1 = PORT_PB16; //CS HIGH
+    REG_PORT_OUTSET1 = PORT_PB13; //A0 HIGH
     nop;
     bus->write(data);
-    digitalWrite(WR, LOW);
-    digitalWrite(CS, LOW);
+    REG_PORT_OUTCLR1 = PORT_PB15; //WR LOW
+    REG_PORT_OUTCLR1 = PORT_PB16; //CS LOW
     delayMicroseconds(2);
-    digitalWrite(WR, HIGH);
-    digitalWrite(CS, HIGH);
-    delayMicroseconds(5);
-
-    // GPIOB->regs->BSRR = (1U << 0) << (16 * !a1); //_A1 PB0
-    // GPIOA->regs->ODR &= ~(0x0800); //_A0 LOW
-    // nop;
-    // bus->write(addr);
-    // GPIOB->regs->ODR &= ~(0x0808); //_CS LOW
-    // GPIOA->regs->ODR &= ~(0x1000); //_WR LOW
-    // delayMicroseconds(2);
-    // GPIOA->regs->ODR |= 0x1000;    //_WR HIGH 
-    // GPIOB->regs->ODR |= 0x0808;    //_CS HIGH
-    // GPIOA->regs->ODR |= 0x0800;    //_A0 HIGH
-    // nop;
-    // bus->write(data);
-    // GPIOA->regs->ODR &= ~(0x1000); //_WR LOW
-    // GPIOB->regs->ODR &= ~(0x0808); //_CS LOW
-    // delayMicroseconds(2);
-    // GPIOA->regs->ODR |= 0x1000;    //_WR HIGH
-    // GPIOB->regs->ODR |= 0x0808;    //_CS HIGH
-    // delayMicroseconds(5);
+    //sleepClocks(NTSC_YMCLK, 17);
+    REG_PORT_OUTSET1 = PORT_PB15; //WR HIGH
+    REG_PORT_OUTSET1 = PORT_PB16; //CS HIGH
+    if(addr >= 0x21 && addr <= 0x9E)
+        delayMicroseconds(11); //~83 cycles
+    else if(addr >= 0xA0 && addr <= 0xB6)
+        delayMicroseconds(6); //~47 cycles
+    else
+        delayMicroseconds(2); //~17 cycles
+    
+    
+    
+    
 }
 
 void YM2612::reset()
@@ -80,7 +73,6 @@ void YM2612::reset()
 
 void YM2612::setClock(uint32_t frq)
 {
-    //clk->SetFreq(frq);
     clkfrq = frq;
 }
 

@@ -2,8 +2,8 @@
 #define _YM2612_H_
 #include "Bus.h"
 #include "SpinSleep.h"
+#include "clocks.h"
 
-#define nop __asm__ __volatile__ ("nop\n\t")
 
 class YM2612
 {

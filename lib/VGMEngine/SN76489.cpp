@@ -10,7 +10,6 @@ SN76489::SN76489(Bus* _bus, uint8_t _WE)
 
 void SN76489::setClock(uint32_t frq)
 {
-    //clk->SetFreq(frq);
     clkfrq = frq;
 }
 
@@ -40,13 +39,18 @@ void SN76489::write(uint8_t data)
         writeRaw(data);
 }
 
+
+
 void SN76489::writeRaw(uint8_t data)
 {
-    digitalWrite(WE, HIGH);
+    //32 clock cycles is 280.11nS
+    //120MHz nop is about 8.3nS
+    REG_PORT_OUTSET1 = PORT_PB17; //WE HIGH 
     bus->write(data);
-    digitalWrite(WE, LOW);
-    delayMicroseconds(11);
-    digitalWrite(WE, HIGH);
+    REG_PORT_OUTCLR1 = PORT_PB17; //WE LOW
+    sleepClocks(NTSC_COLORBURST, 36);     //Around 10uS or so. The PSG is very slow. Datasheet requests 32 cycles, but 36 should give us time to account for CYCCNT inaccuracies 
+    REG_PORT_OUTSET1 = PORT_PB17; //WE HIGH
+    sleepClocks(NTSC_COLORBURST, 1);      //Safety delay so we don't slam into the second write cycle before the PSG is finished with the first
 }
 
 SN76489::~SN76489(){}

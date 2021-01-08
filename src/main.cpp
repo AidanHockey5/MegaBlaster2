@@ -102,7 +102,15 @@ bool doParse = false;
 
 void setup()
 {
+  //COM
+  Wire.begin();
+  Wire.setClock(400000L);
+  SPI.begin();
+  Serial.begin(115200);
+
   si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0);
+  si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_4MA);
+  si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_4MA);
   si5351.set_freq(7670454ULL*100ULL, SI5351_CLK0); //CLK0 YM
   si5351.set_freq(3579545ULL*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
 
@@ -142,11 +150,6 @@ void setup()
   PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
   PORT->Group[1].DIRCLR.reg = PORT_PB09;
   PORT->Group[1].OUTSET.reg = PORT_PB09;
-
-  //COM
-  Wire.begin();
-  SPI.begin();
-  Serial.begin(115200);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
