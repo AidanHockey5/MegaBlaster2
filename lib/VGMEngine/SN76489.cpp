@@ -48,7 +48,7 @@ void SN76489::writeRaw(uint8_t data)
     REG_PORT_OUTSET1 = PORT_PB17; //WE HIGH 
     bus->write(data);
     REG_PORT_OUTCLR1 = PORT_PB17; //WE LOW
-    sleepClocks(NTSC_COLORBURST, 36);     //Around 10uS or so. The PSG is very slow. Datasheet requests 32 cycles, but 36 should give us time to account for CYCCNT inaccuracies 
+    sleepClocks(NTSC_COLORBURST, 37);     //Around 10uS or so. The PSG is very slow. Datasheet requests 32 cycles, but 37 should give us time to account for CYCCNT inaccuracies 
     REG_PORT_OUTSET1 = PORT_PB17; //WE HIGH
     sleepClocks(NTSC_COLORBURST, 1);      //Safety delay so we don't slam into the second write cycle before the PSG is finished with the first
 }

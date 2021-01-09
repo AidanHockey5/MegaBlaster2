@@ -195,7 +195,7 @@ uint32_t freeKB()
   return kb;
 }
 
-String GetPathFromManifest(uint32_t index)
+String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the manifest file
 {
   String selection;
   manifest.seek(0);
@@ -476,35 +476,15 @@ bool startTrack(FileStrategy fileStrategy, String request)
     {
       uint32_t rng = random(numberOfFiles-1);
       filePath = GetPathFromManifest(rng);
-      
-      // uint32_t randomFile = currentFileNumber;
-      // if(numberOfFiles > 1)
-      // {
-      //   while(randomFile == currentFileNumber)
-      //     randomFile = random(numberOfFiles-1);
-      // }
-      // currentFileNumber = randomFile;
-      // SD.vwd()->rewind();
-      // nextFile.openNext(SD.vwd(), O_READ);
-      // {
-      //   for(uint32_t i = 0; i<randomFile; i++)
-      //   {
-      //     nextFile.close();
-      //     nextFile.openNext(SD.vwd(), O_READ);
-      //   }
-      // }
-      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      // nextFile.close();
     }
     break;
     case REQUEST:
     {
       request.trim();
-      char *cstr = &request[0u]; //Convert to C-string
-      if(SD.exists(cstr))
+      if(SD.exists(request.c_str()))
       {
         file.close();
-        strcpy(fileName, cstr);
+        filePath = request;
         Serial.println("File found!");
       }
       else
