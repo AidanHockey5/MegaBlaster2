@@ -39,7 +39,6 @@ void YM2612::write(uint8_t addr, uint8_t data, bool a1)
     REG_PORT_OUTCLR1 = PORT_PB16; //CS LOW
     REG_PORT_OUTCLR1 = PORT_PB15; //WR LOW
     delayMicroseconds(2);
-    //sleepClocks(NTSC_YMCLK, 17);
     REG_PORT_OUTSET1 = PORT_PB15; //WR HIGH
     REG_PORT_OUTSET1 = PORT_PB16; //CS HIGH
     REG_PORT_OUTSET1 = PORT_PB13; //A0 HIGH
@@ -48,19 +47,14 @@ void YM2612::write(uint8_t addr, uint8_t data, bool a1)
     REG_PORT_OUTCLR1 = PORT_PB15; //WR LOW
     REG_PORT_OUTCLR1 = PORT_PB16; //CS LOW
     delayMicroseconds(2);
-    //sleepClocks(NTSC_YMCLK, 17);
     REG_PORT_OUTSET1 = PORT_PB15; //WR HIGH
     REG_PORT_OUTSET1 = PORT_PB16; //CS HIGH
-    if(addr >= 0x21 && addr <= 0x9E)
+    if(addr >= 0x21 && addr <= 0x9E) //Twww YM3438 application manual timings
         delayMicroseconds(11); //~83 cycles
     else if(addr >= 0xA0 && addr <= 0xB6)
         delayMicroseconds(6); //~47 cycles
     else
         delayMicroseconds(2); //~17 cycles
-    
-    
-    
-    
 }
 
 void YM2612::reset()

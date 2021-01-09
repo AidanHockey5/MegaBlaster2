@@ -21,6 +21,8 @@ extern "C" {
 
 #include "VGMEngine.h"
 
+const uint32_t MANIFEST_MAGIC = 0x12345678;
+
 //Debug variables
 #define DEBUG true //Set this to true for a detailed printout of the header data & any errored command bytes
 #define DEBUG_LED A4
@@ -48,14 +50,14 @@ void handleButtons();
 void prepareChips();
 void readGD3();
 void drawOLEDTrackInfo();
+void CreateManifest();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
+uint32_t freeKB();
 uint8_t VgmCommandLength(uint8_t Command);
-uint8_t readBuffer();
-uint16_t readBuffer16();
-uint32_t readBuffer32();
-uint32_t readSD32();
+uint32_t readFile32(FatFile *f);
 uint16_t parseVGM();
+String GetPathFromManifest(uint32_t index);
 
 Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
 
@@ -79,10 +81,11 @@ const int select_btn = PORT_PB09;
 
 //SD & File Streaming
 SdFat SD;
-File file;
+File file, manifest;
 #define MAX_FILE_NAME_SIZE 128
 char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
+uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
 
 //Counters
@@ -111,8 +114,8 @@ void setup()
   si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0);
   si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_4MA);
   si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_4MA);
-  si5351.set_freq(7670454ULL*100ULL, SI5351_CLK0); //CLK0 YM
-  si5351.set_freq(3579545ULL*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
+  si5351.set_freq(NTSC_YMCLK*100ULL, SI5351_CLK0); //CLK0 YM
+  si5351.set_freq(NTSC_COLORBURST*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
 
   //RNG
   trngInit();
@@ -179,19 +182,137 @@ void setup()
 
   //Prepare files
   removeMeta();
-
-  File countFile;
-  while ( countFile.openNext( SD.vwd(), O_READ ))
-  {
-    countFile.close();
-    numberOfFiles++;
-  }
-
-  countFile.close();
-  SD.vwd()->rewind();
+  CreateManifest();
 
   //Begin
   startTrack(FIRST_START);
+}
+
+uint32_t freeKB()
+{
+  uint32_t kb = SD.vol()->freeClusterCount();
+  kb *= SD.vol()->blocksPerCluster()/2;
+  return kb;
+}
+
+String GetPathFromManifest(uint32_t index)
+{
+  String selection;
+  manifest.seek(0);
+  manifest.open("MANIFEST", O_READ);
+  manifest.readStringUntil('\n'); //Skip machine generated preamble
+  uint32_t i = 0;
+  while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
+  {           //This part just skips every entry until we arrive to the line we want
+    if(i == index)
+      break;
+    if(manifest.read() == '\n')
+      i++;
+    if(i > numberOfFiles)
+      return "ERROR";
+  }
+  selection = manifest.readStringUntil('\n');
+  selection.replace(String(index) + ":", "");
+  return selection;
+}
+
+uint32_t readFile32(FatFile *f)
+{
+  uint32_t d = 0;
+  uint8_t v0 = f->read();
+  uint8_t v1 = f->read();
+  uint8_t v2 = f->read();
+  uint8_t v3 = f->read();
+  d = uint32_t(v0 + (v1 << 8) + (v2 << 16) + (v3 << 24));
+  return d;
+}
+
+void CreateManifest()
+{
+  //Manifest format
+  //Preamble (String)
+  //<file paths>(Strings)
+  //...
+  //Magic Number (uint32_t BIN)
+  //Total # files (uint32_t BIN)
+  //Last SD Free Space in KB (uint32_t BIN)
+
+  FatFile d, f;
+  String path = "";
+  char name[MAX_FILE_NAME_SIZE];
+  Serial.println("Checking file manifest...");
+rebuild:
+  if(!SD.exists("MANIFEST"))
+  {
+    manifest.open("MANIFEST", O_RDWR | O_CREAT);
+    const uint32_t empty = 0x0;
+    manifest.write(&MANIFEST_MAGIC, 4); //Magic #
+    manifest.write(&empty, 4); //Total # files
+    manifest.write(&empty, 4); //Last free space
+    manifest.close();
+  }
+
+  manifest.open("MANIFEST", O_READ);
+
+  manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
+  if(readFile32(&manifest) != MANIFEST_MAGIC)
+  {
+    Serial.println("MANIFEST MAGIC BAD!");
+    manifest.remove();
+    manifest.close();
+    goto rebuild;
+  }
+  else
+  {
+    Serial.println("MANIFEST MAGIC OK");
+  }
+  
+  manifest.seekEnd(-8);
+  numberOfFiles = readFile32(&manifest);
+
+  manifest.seekEnd(-4); //Read-in old manifest size
+  uint32_t prevKB = readFile32(&manifest);
+
+  // Serial.print("Free: "); Serial.println(freeKB());
+  // Serial.print("File: "); Serial.println(prevKB);
+
+  if(prevKB != freeKB()) //Used space mismatch. Most likely files have changed.
+  {
+    numberOfFiles = 0;
+    Serial.println("File changes detected! Re-indexing. Please wait...");
+    manifest.close();
+    manifest.remove();
+    manifest.open("MANIFEST", O_RDWR );
+    manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
+    while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
+    {
+      if(d.isDir() && !d.isRoot()) //Include all dirs except root
+      {
+        d.getName(name, MAX_FILE_NAME_SIZE);
+        path = String(name);
+        numberOfDirectories++;
+        while(f.openNext(&d, O_READ)) //Once you're in a dir, go through each file and record them
+        {
+          f.getName(name, MAX_FILE_NAME_SIZE);
+          //Serial.println(path + "/" + String(name)); //Replace with manifest file right
+          manifest.print(numberOfFiles++);
+          manifest.print(":");
+          manifest.println(path + "/" + String(name));
+          f.close();
+        } 
+      }
+      d.close();
+    }
+    uint32_t tmp = freeKB();
+    manifest.write(&MANIFEST_MAGIC, 4);
+    manifest.write(&numberOfFiles, 4);
+    manifest.write(&tmp, 4);
+  }
+  else
+    Serial.println("No change in files, continuing...");
+
+  manifest.close();
+  Serial.println("Indexing complete");
 }
 
 void removeMeta() //Remove useless meta files
@@ -290,6 +411,8 @@ void drawOLEDTrackInfo()
 //Mount file and prepare for playback. Returns true if file is found.
 bool startTrack(FileStrategy fileStrategy, String request)
 {
+  String filePath = "";
+
   pauseISR();
   ready = false;
   File nextFile;
@@ -299,9 +422,11 @@ bool startTrack(FileStrategy fileStrategy, String request)
   {
     case FIRST_START:
     {
-      nextFile.openNext(SD.vwd(), O_READ);
-      nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      nextFile.close();
+      // nextFile.openNext(SD.vwd(), O_READ);
+      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+      // nextFile.close();
+      //fileName = GetPathFromManifest().c_str();
+      filePath = GetPathFromManifest(0);
       currentFileNumber = 0;
     }
     break;
@@ -349,24 +474,27 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
     case RND:
     {
-      uint32_t randomFile = currentFileNumber;
-      if(numberOfFiles > 1)
-      {
-        while(randomFile == currentFileNumber)
-          randomFile = random(numberOfFiles-1);
-      }
-      currentFileNumber = randomFile;
-      SD.vwd()->rewind();
-      nextFile.openNext(SD.vwd(), O_READ);
-      {
-        for(uint32_t i = 0; i<randomFile; i++)
-        {
-          nextFile.close();
-          nextFile.openNext(SD.vwd(), O_READ);
-        }
-      }
-      nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      nextFile.close();
+      uint32_t rng = random(numberOfFiles-1);
+      filePath = GetPathFromManifest(rng);
+      
+      // uint32_t randomFile = currentFileNumber;
+      // if(numberOfFiles > 1)
+      // {
+      //   while(randomFile == currentFileNumber)
+      //     randomFile = random(numberOfFiles-1);
+      // }
+      // currentFileNumber = randomFile;
+      // SD.vwd()->rewind();
+      // nextFile.openNext(SD.vwd(), O_READ);
+      // {
+      //   for(uint32_t i = 0; i<randomFile; i++)
+      //   {
+      //     nextFile.close();
+      //     nextFile.openNext(SD.vwd(), O_READ);
+      //   }
+      // }
+      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+      // nextFile.close();
     }
     break;
     case REQUEST:
@@ -388,9 +516,11 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
   }
 
-  if(SD.exists(fileName))
+  filePath.trim();
+  Serial.println(filePath);
+  if(SD.exists(filePath.c_str()))
     file.close();
-  file = SD.open(fileName, FILE_READ);
+  file = SD.open(filePath.c_str(), FILE_READ);
   if(!file)
   {
     Serial.println("Failed to read file");
