@@ -132,6 +132,20 @@ bool samplePlaying = false;
 PlayMode playMode = SHUFFLE;
 bool doParse = false;
 
+void EIC_5_Handler( void)
+{
+    if (EIC->INTFLAG.reg & (1 << 9))
+    { 
+        Serial.print("FIRED");
+        EIC->INTFLAG.reg = (1 << 9);                /* clear interrupt flag */
+    }
+    else
+    {                                                      /* spurious interrupt?, clear all interrupt flags */ 
+        EIC->INTFLAG.reg = EIC->INTFLAG.reg;               /* clear all EIC interrupt flags */
+    }
+
+}
+
 void setup()
 {
   //COM
@@ -179,7 +193,7 @@ void setup()
   PORT->Group[1].OUTSET.reg = PORT_PB05;
 
   //Select button input pullup
-  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
+  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN|PORT_PINCFG_INEN); 
   PORT->Group[1].DIRCLR.reg = PORT_PB09;
   PORT->Group[1].OUTSET.reg = PORT_PB09;
 
@@ -188,8 +202,8 @@ void setup()
   VGMEngine.sn76489 = &sn;
 
   //u8g2 OLED
-  u8x8.begin();
   u8x8.setBusClock(600000); //Overclock display, should only be 400KHz max, but we're little stinkers
+  u8x8.begin();
   u8x8.setFont(u8x8_font_torussansbold8_r);
 
   //OLED
