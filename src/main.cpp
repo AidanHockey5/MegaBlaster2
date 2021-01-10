@@ -5,7 +5,12 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "SdFat.h"
-#include "U8g2lib.h" //Run this command in the terminal below if PIO asks for a dependancy: pio lib install "U8g2"
+//#include "U8g2lib.h" //Run this command in the terminal below if PIO asks for a dependancy: pio lib install "U8g2"
+#include "menu.h"
+#include "menuIO/serialIO.h"
+#include "plugin/SdFatMenu.h"
+#include "menuIO/U8x8Out.h"
+#include "U8x8lib.h"
 
 #include "YM2612.h"
 #include "SN76489.h"
@@ -66,19 +71,6 @@ Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
 SN76489 sn(&bus, 2);
 
-//OLED
-U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
-//U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
-//U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
-bool isOledOn = true;
-
-//Buttons
-const int prev_btn = PORT_PB00;
-const int rand_btn = PORT_PB01;
-const int next_btn = PORT_PB04;
-const int option_btn = PORT_PB05;
-const int select_btn = PORT_PB09;
-
 //SD & File Streaming
 SdFat SD;
 File file, manifest;
@@ -87,6 +79,43 @@ char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
 uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
+
+//OLED & Menus
+#define U8_Width 128
+#define U8_Height 64
+U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE);
+const char* constMEM hexDigit MEMMODE="0123456789ABCDEF";
+const char* constMEM hexNr[] MEMMODE={"0","x",hexDigit,hexDigit};
+using namespace Menu;
+char buf1[]="0x11";//<-- menu will edit this text
+using namespace Menu;
+result filePick(eventMask event, navNode& nav, prompt &item);
+SDMenuT<CachedFSO<SdFat,32>> filePickMenu(SD,"Music","/",filePick,enterEvent);
+#define MAX_DEPTH 2
+MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
+  ,SUBMENU(filePickMenu)
+  ,OP("Something else...",doNothing,noEvent)
+  ,EXIT("<Back")
+);
+
+MENU_OUTPUTS(out,MAX_DEPTH
+  ,U8X8_OUT(u8x8,{0,0,16,8}) //0,0 Char# x y
+  //,SERIAL_OUT(Serial)
+  ,NONE//must have 2 items at least
+);
+serialIn serial(Serial);
+NAVROOT(nav,mainMenu,MAX_DEPTH,serial,out);
+
+//U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
+
+bool isOledOn = true;
+
+//Buttons
+const int prev_btn = PORT_PB00;
+const int rand_btn = PORT_PB01;
+const int next_btn = PORT_PB04;
+const int option_btn = PORT_PB05;
+const int select_btn = PORT_PB09;
 
 //Counters
 uint32_t bufferPos = 0;
@@ -158,25 +187,32 @@ void setup()
   VGMEngine.ym2612 = &opn;
   VGMEngine.sn76489 = &sn;
 
+  //u8g2 OLED
+  u8x8.begin();
+  u8x8.setBusClock(600000); //Overclock display, should only be 400KHz max, but we're little stinkers
+  u8x8.setFont(u8x8_font_torussansbold8_r);
+
   //OLED
-  oled.begin();
-  oled.setFont(u8g2_font_fub11_tf);
-  oled.drawXBM(0,0, logo_width, logo_height, logo);
-  oled.sendBuffer();
-  delay(3000);
-  oled.clearDisplay();
+  // oled.begin();
+  // oled.setFont(u8g2_font_fub11_tf);
+  // oled.drawXBM(0,0, logo_width, logo_height, logo);
+  // oled.sendBuffer();
+  // delay(3000);
+  // oled.clearDisplay();
 
   //SD
   REG_PORT_DIRSET0 = PORT_PA15; //Set PA15 to output
   if(!SD.begin(PORT_PA15, SPI_FULL_SPEED))
   {
     Serial.println("SD Mount Failed!");
-    oled.clearBuffer();
-    oled.drawStr(0,16,"SD Mount");
-    oled.drawStr(0,32,"failed!");
-    oled.sendBuffer();
+    // oled.clearBuffer();
+    // oled.drawStr(0,16,"SD Mount");
+    // oled.drawStr(0,32,"failed!");
+    // oled.sendBuffer();
     while(true){Serial.println("SD MOUNT FAILED"); delay(1000);}
   }
+  filePickMenu.begin();
+  nav.useAccel=true;
 
   Serial.flush();
 
@@ -373,39 +409,39 @@ void setISR()
 
 void drawOLEDTrackInfo()
 {
-  ready = false;
-  if(isOledOn)
-  {
-    oled.setPowerSave(0);
-    oled.clearDisplay();
-    oled.setFont(u8g2_font_helvR08_te);
-    oled.sendBuffer();
-    oled.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
-    oled.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
-    oled.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
-    oled.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
-    String fileNumberData = "File: " + String(currentFileNumber+1) + "/" + String(numberOfFiles);
-    char* cstr;
-    cstr = &fileNumberData[0u];
-    oled.drawStr(0,50, cstr);
-    String playmodeStatus;
-    if(playMode == LOOP)
-      playmodeStatus = "LOOP";
-    else if(playMode == SHUFFLE)
-      playmodeStatus = "SHUFFLE";
-    else
-      playmodeStatus = "IN ORDER";
-    cstr = &playmodeStatus[0u];
-    oled.drawStr(0, 60, cstr);
-    oled.sendBuffer();
-  }
-  else
-  {
-    oled.clearDisplay();
-    oled.setPowerSave(1);
-    oled.sendBuffer();
-  }
-  ready = true;
+  // ready = false;
+  // if(isOledOn)
+  // {
+  //   oled.setPowerSave(0);
+  //   oled.clearDisplay();
+  //   oled.setFont(u8g2_font_helvR08_te);
+  //   oled.sendBuffer();
+  //   oled.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
+  //   oled.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
+  //   oled.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
+  //   oled.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+  //   String fileNumberData = "File: " + String(currentFileNumber+1) + "/" + String(numberOfFiles);
+  //   char* cstr;
+  //   cstr = &fileNumberData[0u];
+  //   oled.drawStr(0,50, cstr);
+  //   String playmodeStatus;
+  //   if(playMode == LOOP)
+  //     playmodeStatus = "LOOP";
+  //   else if(playMode == SHUFFLE)
+  //     playmodeStatus = "SHUFFLE";
+  //   else
+  //     playmodeStatus = "IN ORDER";
+  //   cstr = &playmodeStatus[0u];
+  //   oled.drawStr(0, 60, cstr);
+  //   oled.sendBuffer();
+  // }
+  // else
+  // {
+  //   oled.clearDisplay();
+  //   oled.setPowerSave(1);
+  //   oled.sendBuffer();
+  // }
+  // ready = true;
 }
 
 //Mount file and prepare for playback. Returns true if file is found.
@@ -540,6 +576,7 @@ void tick()
 //Poll the serial port
 void handleSerialIn()
 {
+  return;
   while(Serial.available())
   {
     pauseISR();
@@ -601,65 +638,74 @@ void handleButtons()
   uint32_t count = 0;
 
   if(!(REG_PORT_IN1 & next_btn)) //Check if buttons are LOW indicating that they are pressed
-    startTrack(NEXT);            //Remember, these button pins have pullups enabled on them
+    nav.doNav(navCmd(enterCmd));
+    //startTrack(NEXT);            //Remember, these button pins have pullups enabled on them
   if(!(REG_PORT_IN1 & prev_btn))
-    startTrack(PREV);
+    nav.doNav(navCmd(escCmd));
+    //startTrack(PREV);
   if(!(REG_PORT_IN1 & rand_btn))
-    startTrack(RND);
+    nav.doNav(navCmd(upCmd));
+    //startTrack(RND);
   if(!(REG_PORT_IN1 & option_btn))
-    togglePlaymode = true;
-  else
-    buttonLock = false;
-  while(!(REG_PORT_IN1 & option_btn))
-  {
-    pauseISR();
-    if(count >= 100) 
-    {
-      //toggle OLED after one second of holding OPTION button
-      isOledOn = !isOledOn;
-      drawOLEDTrackInfo();
-      togglePlaymode = false;
-      buttonLock = true;
-      break;
-    } 
-    delay(10);
-    count++;
-  }
-  if(buttonLock)
-  {
-    togglePlaymode = false;
-    setISR();
-  }
+    nav.doNav(navCmd(downCmd));
+    //togglePlaymode = true;
+  // else
+  //   buttonLock = false;
+  if(!(REG_PORT_IN1 & select_btn))
+    nav.doNav(navCmd(enterCmd));
 
-  if(togglePlaymode)
-  {
-    togglePlaymode = false;
-    if(playMode == SHUFFLE)
-      playMode = LOOP;
-    else if(playMode == LOOP)
-      playMode = IN_ORDER;
-    else if(playMode == IN_ORDER)
-      playMode = SHUFFLE;
+  // while(!(REG_PORT_IN1 & option_btn)) //Turn off OLED
+  // {
+  //   pauseISR();
+  //   if(count >= 100) 
+  //   {
+  //     //toggle OLED after one second of holding OPTION button
+  //     isOledOn = !isOledOn;
+  //     drawOLEDTrackInfo();
+  //     togglePlaymode = false;
+  //     buttonLock = true;
+  //     break;
+  //   } 
+  //   delay(10);
+  //   count++;
+  // }
+  // if(buttonLock)
+  // {
+  //   togglePlaymode = false;
+  //   setISR();
+  // }
 
-    if(playMode == LOOP)
-    {
-      VGMEngine.maxLoops = 0xFFFF;
-    }
-    else
-    {
-      VGMEngine.maxLoops = maxLoops;
-    }
+  // if(togglePlaymode)
+  // {
+  //   togglePlaymode = false;
+  //   if(playMode == SHUFFLE)
+  //     playMode = LOOP;
+  //   else if(playMode == LOOP)
+  //     playMode = IN_ORDER;
+  //   else if(playMode == IN_ORDER)
+  //     playMode = SHUFFLE;
+
+  //   if(playMode == LOOP)
+  //   {
+  //     VGMEngine.maxLoops = 0xFFFF;
+  //   }
+  //   else
+  //   {
+  //     VGMEngine.maxLoops = maxLoops;
+  //   }
     
-    drawOLEDTrackInfo();
-    setISR();
-  }
+  //   drawOLEDTrackInfo();
+  //   setISR();
+  // }
 }
 
 void loop()
 {    
   while(!VGMEngine.play()) //needs to account for LOOP playmode
   {
-    if(Serial.available() > 0)
+    if(!VGMEngine.isBusy)
+      nav.poll();
+    if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
       handleSerialIn();
     handleButtons();
   }
@@ -668,4 +714,27 @@ void loop()
     startTrack(RND);
   if(playMode == IN_ORDER)
     startTrack(NEXT);
+}
+
+
+
+
+//UI
+
+//implementing the handler here after filePick is defined...
+result filePick(eventMask event, navNode& nav, prompt &item) 
+{
+  // switch(event) {//for now events are filtered only for enter, so we dont need this checking
+  //   case enterCmd:
+      if (nav.root->navFocus==(navTarget*)&filePickMenu) {
+        Serial.println();
+        Serial.print("selected file:");
+        Serial.println(filePickMenu.selectedFile);
+        Serial.print("from folder:");
+        Serial.println(filePickMenu.selectedFolder);
+        startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
+      }
+  //     break;
+  // }
+  return proceed;
 }

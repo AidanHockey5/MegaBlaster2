@@ -39,6 +39,7 @@ public:
     uint16_t getLoops();
     uint16_t maxLoops = 3;
     bool resetISR = false;
+    bool isBusy = false;
     void ramtest();
 
 private:

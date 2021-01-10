@@ -222,8 +222,10 @@ bool VGMEngineClass::play()
     load(); 
     while(waitSamples <= 0)
     {
+        isBusy = true;
         waitSamples += parseVGM();
     }
+    isBusy = false;
     if(loopCount == maxLoops)
         return true;
     return false;
