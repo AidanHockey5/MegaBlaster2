@@ -56,6 +56,7 @@ void prepareChips();
 void readGD3();
 void drawOLEDTrackInfo();
 void CreateManifest();
+void buttonISR();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
 uint32_t freeKB();
@@ -111,11 +112,12 @@ NAVROOT(nav,mainMenu,MAX_DEPTH,serial,out);
 bool isOledOn = true;
 
 //Buttons
-const int prev_btn = PORT_PB00;
-const int rand_btn = PORT_PB01;
-const int next_btn = PORT_PB04;
-const int option_btn = PORT_PB05;
-const int select_btn = PORT_PB09;
+const int prev_btn = 47;    //PORT_PB00;
+const int rand_btn = 48;    //PORT_PB01;
+const int next_btn = 49;    //PORT_PB04;
+const int option_btn = 50;  //PORT_PB05;
+const int select_btn = 19;  //PORT_PB09;
+uint8_t btnmap = 0x0;       //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
 
 //Counters
 uint32_t bufferPos = 0;
@@ -132,25 +134,11 @@ bool samplePlaying = false;
 PlayMode playMode = SHUFFLE;
 bool doParse = false;
 
-void EIC_5_Handler( void)
-{
-    if (EIC->INTFLAG.reg & (1 << 9))
-    { 
-        Serial.print("FIRED");
-        EIC->INTFLAG.reg = (1 << 9);                /* clear interrupt flag */
-    }
-    else
-    {                                                      /* spurious interrupt?, clear all interrupt flags */ 
-        EIC->INTFLAG.reg = EIC->INTFLAG.reg;               /* clear all EIC interrupt flags */
-    }
-
-}
-
 void setup()
 {
   //COM
   Wire.begin();
-  Wire.setClock(400000L);
+  Wire.setClock(600000L);
   SPI.begin();
   Serial.begin(115200);
 
@@ -171,31 +159,17 @@ void setup()
   resetSleepSpin();
 
   //Button configs
-  //Group 1 is port B, PINCFG just wants the literal pin number on the port, DIRCLR and OUTSET want the masked PORT_XX00 *not* the PIN_XX00
-  //Prev button input pullup
-  PORT->Group[1].PINCFG[0].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
-  PORT->Group[1].DIRCLR.reg = PORT_PB00;
-  PORT->Group[1].OUTSET.reg = PORT_PB00;
+  pinMode(next_btn, INPUT_PULLUP);
+  pinMode(prev_btn, INPUT_PULLUP);
+  pinMode(option_btn, INPUT_PULLUP);
+  pinMode(select_btn, INPUT_PULLUP);
+  pinMode(rand_btn, INPUT_PULLUP);
 
-  //Rand button input pullup
-  PORT->Group[1].PINCFG[1].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
-  PORT->Group[1].DIRCLR.reg = PORT_PB01;
-  PORT->Group[1].OUTSET.reg = PORT_PB01;
-
-  //Next button input pullup
-  PORT->Group[1].PINCFG[4].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
-  PORT->Group[1].DIRCLR.reg = PORT_PB04;
-  PORT->Group[1].OUTSET.reg = PORT_PB04;
-
-  //Option button input pullup
-  PORT->Group[1].PINCFG[5].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
-  PORT->Group[1].DIRCLR.reg = PORT_PB05;
-  PORT->Group[1].OUTSET.reg = PORT_PB05;
-
-  //Select button input pullup
-  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
-  PORT->Group[1].DIRCLR.reg = PORT_PB09;
-  PORT->Group[1].OUTSET.reg = PORT_PB09;
+  attachInterrupt(digitalPinToInterrupt(next_btn), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(prev_btn), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(option_btn), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(select_btn), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(rand_btn), buttonISR, FALLING);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
@@ -236,6 +210,18 @@ void setup()
 
   //Begin
   startTrack(FIRST_START);
+}
+
+void buttonISR()
+{
+  //Button map
+  //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
+  btnmap = 0b00100000; //Set the 'active' flag to let the system know that a button has been pressed
+  bitWrite(btnmap, 4, !digitalRead(prev_btn));
+  bitWrite(btnmap, 3, !digitalRead(rand_btn));
+  bitWrite(btnmap, 2, !digitalRead(next_btn));
+  bitWrite(btnmap, 1, !digitalRead(option_btn));
+  bitWrite(btnmap, 0, !digitalRead(select_btn));
 }
 
 uint32_t freeKB()
@@ -641,76 +627,36 @@ void handleSerialIn()
 
 //Check for button input
 bool buttonLock = false;
+unsigned long cur, prv = 0;
+const uint8_t msDebounce = 50;
 void handleButtons()
 {
-//Direct IO examples for reading pins
-//if (REG_PORT_IN0 & PORT_PA19)  // if (digitalRead(12) == HIGH)
-//if (!(REG_PORT_IN0 | ~PORT_PA19)) // if (digitalRead(12) == LOW) FOR NON-PULLED PINS!
-//if(!(REG_PORT_IN1 & next_btn)) //LOW for PULLED PINS
-
-  bool togglePlaymode = false;
-  uint32_t count = 0;
-
-  if(!(REG_PORT_IN1 & next_btn)) //Check if buttons are LOW indicating that they are pressed
-    nav.doNav(navCmd(enterCmd));
-    //startTrack(NEXT);            //Remember, these button pins have pullups enabled on them
-  if(!(REG_PORT_IN1 & prev_btn))
-    nav.doNav(navCmd(escCmd));
-    //startTrack(PREV);
-  if(!(REG_PORT_IN1 & rand_btn))
-    nav.doNav(navCmd(upCmd));
-    //startTrack(RND);
-  if(!(REG_PORT_IN1 & option_btn))
-    nav.doNav(navCmd(downCmd));
-    //togglePlaymode = true;
-  // else
-  //   buttonLock = false;
-  if(!(REG_PORT_IN1 & select_btn))
-    nav.doNav(navCmd(enterCmd));
-
-  // while(!(REG_PORT_IN1 & option_btn)) //Turn off OLED
-  // {
-  //   pauseISR();
-  //   if(count >= 100) 
-  //   {
-  //     //toggle OLED after one second of holding OPTION button
-  //     isOledOn = !isOledOn;
-  //     drawOLEDTrackInfo();
-  //     togglePlaymode = false;
-  //     buttonLock = true;
-  //     break;
-  //   } 
-  //   delay(10);
-  //   count++;
-  // }
-  // if(buttonLock)
-  // {
-  //   togglePlaymode = false;
-  //   setISR();
-  // }
-
-  // if(togglePlaymode)
-  // {
-  //   togglePlaymode = false;
-  //   if(playMode == SHUFFLE)
-  //     playMode = LOOP;
-  //   else if(playMode == LOOP)
-  //     playMode = IN_ORDER;
-  //   else if(playMode == IN_ORDER)
-  //     playMode = SHUFFLE;
-
-  //   if(playMode == LOOP)
-  //   {
-  //     VGMEngine.maxLoops = 0xFFFF;
-  //   }
-  //   else
-  //   {
-  //     VGMEngine.maxLoops = maxLoops;
-  //   }
-    
-  //   drawOLEDTrackInfo();
-  //   setISR();
-  // }
+  //btnmap
+  //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
+  cur = millis();
+  if(cur - prv >= msDebounce) //Software debounce for buttons
+  {
+    prv = cur;
+    switch (btnmap)
+    {
+      case 0b00110000: //prev
+        nav.doNav(navCmd(escCmd));
+      break;
+      case 0b00101000: //rand
+        nav.doNav(navCmd(upCmd));
+      break;
+      case 0b00100100: //next
+        nav.doNav(navCmd(enterCmd));
+      break;
+      case 0b00100010: //option
+        nav.doNav(navCmd(downCmd));
+      break;
+      case 0b00100001: //select
+        nav.doNav(navCmd(enterCmd));
+      break;
+    } 
+  }
+  btnmap = 0x0; //Clear button
 }
 
 void loop()
@@ -721,7 +667,8 @@ void loop()
       nav.poll();
     if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
       handleSerialIn();
-    handleButtons();
+    if(bitRead(btnmap, 5)) //Button interrupt flag was set
+      handleButtons();
   }
   //Hit max loops and/or VGM exited
   if(playMode == SHUFFLE)
@@ -752,3 +699,37 @@ result filePick(eventMask event, navNode& nav, prompt &item)
   // }
   return proceed;
 }
+
+
+  //Handy old code
+
+  //Direct IO examples for reading pins
+  //if (REG_PORT_IN0 & PORT_PA19)  // if (digitalRead(12) == HIGH)
+  //if (!(REG_PORT_IN0 | ~PORT_PA19)) // if (digitalRead(12) == LOW) FOR NON-PULLED PINS!
+  //if(!(REG_PORT_IN1 & next_btn)) //LOW for PULLED PINS
+
+  // //Group 1 is port B, PINCFG just wants the literal pin number on the port, DIRCLR and OUTSET want the masked PORT_XX00 *not* the PIN_XX00
+  // //Prev button input pullup
+  // PORT->Group[1].PINCFG[0].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  // PORT->Group[1].DIRCLR.reg = PORT_PB00;
+  // PORT->Group[1].OUTSET.reg = PORT_PB00;
+
+  // //Rand button input pullup
+  // PORT->Group[1].PINCFG[1].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  // PORT->Group[1].DIRCLR.reg = PORT_PB01;
+  // PORT->Group[1].OUTSET.reg = PORT_PB01;
+
+  // //Next button input pullup
+  // PORT->Group[1].PINCFG[4].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN);
+  // PORT->Group[1].DIRCLR.reg = PORT_PB04;
+  // PORT->Group[1].OUTSET.reg = PORT_PB04;
+
+  // //Option button input pullup
+  // PORT->Group[1].PINCFG[5].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
+  // PORT->Group[1].DIRCLR.reg = PORT_PB05;
+  // PORT->Group[1].OUTSET.reg = PORT_PB05;
+
+  // //Select button input pullup
+  // PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
+  // PORT->Group[1].DIRCLR.reg = PORT_PB09;
+  // PORT->Group[1].OUTSET.reg = PORT_PB09;
