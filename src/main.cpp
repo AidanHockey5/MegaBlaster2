@@ -193,7 +193,7 @@ void setup()
   PORT->Group[1].OUTSET.reg = PORT_PB05;
 
   //Select button input pullup
-  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN|PORT_PINCFG_INEN); 
+  PORT->Group[1].PINCFG[9].reg=(uint8_t)(PORT_PINCFG_INEN|PORT_PINCFG_PULLEN); 
   PORT->Group[1].DIRCLR.reg = PORT_PB09;
   PORT->Group[1].OUTSET.reg = PORT_PB09;
 
