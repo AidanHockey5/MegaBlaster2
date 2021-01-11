@@ -5,12 +5,13 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "SdFat.h"
-//#include "U8g2lib.h" //Run this command in the terminal below if PIO asks for a dependancy: pio lib install "U8g2"
+#include "U8g2lib.h" //Run this command in the terminal below if PIO asks for a dependancy: pio lib install "U8g2"
 #include "menu.h"
 #include "menuIO/serialIO.h"
 #include "plugin/SdFatMenu.h"
-#include "menuIO/U8x8Out.h"
-#include "U8x8lib.h"
+#include <menuIO/u8g2Out.h>
+// #include "menuIO/U8x8Out.h"
+// #include "U8x8lib.h"
 
 #include "YM2612.h"
 #include "SN76489.h"
@@ -56,7 +57,6 @@ void prepareChips();
 void readGD3();
 void drawOLEDTrackInfo();
 void CreateManifest();
-void buttonISR();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
 uint32_t freeKB();
@@ -82,16 +82,35 @@ uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
 
 //OLED & Menus
-#define U8_Width 128
-#define U8_Height 64
-U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE);
+//u8x8
+// #define U8_Width 128
+// #define U8_Height 64
+// U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE);
 const char* constMEM hexDigit MEMMODE="0123456789ABCDEF";
 const char* constMEM hexNr[] MEMMODE={"0","x",hexDigit,hexDigit};
-using namespace Menu;
 char buf1[]="0x11";//<-- menu will edit this text
+
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+#define fontName u8g2_font_profont12_mr   
+#define fontX 6
+#define fontY 12
+#define offsetX 0
+#define offsetY 0
+#define U8_Width 128
+#define U8_Height 64
+const colorDef<uint8_t> colors[6] MEMMODE={
+  {{0,0},{0,1,1}},//bgColor
+  {{1,1},{1,0,0}},//fgColor
+  {{1,1},{1,0,0}},//valColor
+  {{1,1},{1,0,0}},//unitColor
+  {{0,1},{0,0,1}},//cursorColor
+  {{1,1},{1,0,0}},//titleColor
+};
+
 using namespace Menu;
 result filePick(eventMask event, navNode& nav, prompt &item);
 SDMenuT<CachedFSO<SdFat,32>> filePickMenu(SD,"Music","/",filePick,enterEvent);
+
 #define MAX_DEPTH 2
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
@@ -100,7 +119,8 @@ MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
 );
 
 MENU_OUTPUTS(out,MAX_DEPTH
-  ,U8X8_OUT(u8x8,{0,0,16,8}) //0,0 Char# x y
+  ,U8G2_OUT(u8g2,colors,fontX,fontY,offsetX,offsetY,{0,0,U8_Width/fontX,U8_Height/fontY})
+  //,U8X8_OUT(u8x8,{0,0,16,8}) //0,0 Char# x y
   //,SERIAL_OUT(Serial)
   ,NONE//must have 2 items at least
 );
@@ -118,6 +138,11 @@ const int next_btn = 49;    //PORT_PB04;
 const int option_btn = 50;  //PORT_PB05;
 const int select_btn = 19;  //PORT_PB09;
 uint8_t btnmap = 0x0;       //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
+void bISRprev(){btnmap=0b00110000;}
+void bISRrand(){btnmap=0b00101000;}
+void bISRnext(){btnmap=0b00100100;}
+void bISRoption(){btnmap=0b00100010;}
+void bISRselect(){btnmap=0b00100001;}
 
 //Counters
 uint32_t bufferPos = 0;
@@ -165,20 +190,25 @@ void setup()
   pinMode(select_btn, INPUT_PULLUP);
   pinMode(rand_btn, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(next_btn), buttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(prev_btn), buttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(option_btn), buttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(select_btn), buttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(rand_btn), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(next_btn), bISRnext, FALLING);
+  attachInterrupt(digitalPinToInterrupt(prev_btn), bISRprev, FALLING);
+  attachInterrupt(digitalPinToInterrupt(option_btn), bISRoption, FALLING);
+  attachInterrupt(digitalPinToInterrupt(select_btn), bISRselect, FALLING);
+  attachInterrupt(digitalPinToInterrupt(rand_btn), bISRrand, FALLING);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
   VGMEngine.sn76489 = &sn;
 
+  //u8x8 OLED
+  // u8x8.setBusClock(600000); //Overclock display, should only be 400KHz max, but we're little stinkers
+  // u8x8.begin();
+  // u8x8.setFont(u8x8_font_torussansbold8_r);
+
   //u8g2 OLED
-  u8x8.setBusClock(600000); //Overclock display, should only be 400KHz max, but we're little stinkers
-  u8x8.begin();
-  u8x8.setFont(u8x8_font_torussansbold8_r);
+  u8g2.begin();
+  u8g2.setBusClock(600000);
+  u8g2.setFont(fontName);
 
   //OLED
   // oled.begin();
@@ -212,17 +242,20 @@ void setup()
   startTrack(FIRST_START);
 }
 
-void buttonISR()
-{
-  //Button map
-  //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-  btnmap = 0b00100000; //Set the 'active' flag to let the system know that a button has been pressed
-  bitWrite(btnmap, 4, !digitalRead(prev_btn));
-  bitWrite(btnmap, 3, !digitalRead(rand_btn));
-  bitWrite(btnmap, 2, !digitalRead(next_btn));
-  bitWrite(btnmap, 1, !digitalRead(option_btn));
-  bitWrite(btnmap, 0, !digitalRead(select_btn));
-}
+
+
+// void buttonISR()
+// {
+//   //Button map
+//   //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
+//   //btnmap = 0b00100000; //Set the 'active' flag to let the system know that a button has been pressed
+//   bitWrite(btnmap, 5, 1);
+//   bitWrite(btnmap, 4, !digitalRead(prev_btn));
+//   bitWrite(btnmap, 3, !digitalRead(rand_btn));
+//   bitWrite(btnmap, 2, !digitalRead(next_btn));
+//   bitWrite(btnmap, 1, !digitalRead(option_btn));
+//   bitWrite(btnmap, 0, !digitalRead(select_btn));
+// }
 
 uint32_t freeKB()
 {
@@ -627,16 +660,17 @@ void handleSerialIn()
 
 //Check for button input
 bool buttonLock = false;
-unsigned long cur, prv = 0;
-const uint8_t msDebounce = 50;
+uint8_t counter = 0;
 void handleButtons()
 {
   //btnmap
   //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-  cur = millis();
-  if(cur - prv >= msDebounce) //Software debounce for buttons
-  {
-    prv = cur;
+  
+  //if(cur - prv >= 200) //Software debounce in mS for buttons
+  static unsigned long last_interrupt_time = 0;
+  unsigned long interrupt_time = millis();
+  // if(interrupt_time - last_interrupt_time > 200)
+  // {
     switch (btnmap)
     {
       case 0b00110000: //prev
@@ -654,19 +688,32 @@ void handleButtons()
       case 0b00100001: //select
         nav.doNav(navCmd(enterCmd));
       break;
-    } 
-  }
-  btnmap = 0x0; //Clear button
+    }
+    buttonLock = true;
+  //}
+  btnmap = 0; 
+  last_interrupt_time = interrupt_time;
 }
 
+unsigned long prv = 0;
 void loop()
 {    
   while(!VGMEngine.play()) //needs to account for LOOP playmode
   {
-    if(!VGMEngine.isBusy)
-      nav.poll();
+    unsigned long cur = millis();
+    if (nav.changed(0)) {//only draw if menu changed for gfx device
+      //change checking leaves more time for other tasks
+      u8g2.firstPage();
+      do nav.doOutput(); while(u8g2.nextPage());
+    }
+    //nav.poll();
     if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
       handleSerialIn();
+    if(cur - prv > 100)
+    {
+      prv = cur;
+      buttonLock = false;
+    }
     if(bitRead(btnmap, 5)) //Button interrupt flag was set
       handleButtons();
   }
