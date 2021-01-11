@@ -20,6 +20,7 @@
 #include "SpinSleep.h"
 #include "SerialUtils.h"
 #include "clocks.h"
+#include "Bounce2.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -137,12 +138,15 @@ const int rand_btn = 48;    //PORT_PB01;
 const int next_btn = 49;    //PORT_PB04;
 const int option_btn = 50;  //PORT_PB05;
 const int select_btn = 19;  //PORT_PB09;
-uint8_t btnmap = 0x0;       //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-void bISRprev(){btnmap=0b00110000;}
-void bISRrand(){btnmap=0b00101000;}
-void bISRnext(){btnmap=0b00100100;}
-void bISRoption(){btnmap=0b00100010;}
-void bISRselect(){btnmap=0b00100001;}
+
+Bounce buttons[5];
+
+//uint8_t btnmap = 0x0;       //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
+// void bISRprev(){btnmap=0b00110000;}
+// void bISRrand(){btnmap=0b00101000;}
+// void bISRnext(){btnmap=0b00100100;}
+// void bISRoption(){btnmap=0b00100010;}
+// void bISRselect(){btnmap=0b00100001;}
 
 //Counters
 uint32_t bufferPos = 0;
@@ -184,17 +188,28 @@ void setup()
   resetSleepSpin();
 
   //Button configs
-  pinMode(next_btn, INPUT_PULLUP);
-  pinMode(prev_btn, INPUT_PULLUP);
-  pinMode(option_btn, INPUT_PULLUP);
-  pinMode(select_btn, INPUT_PULLUP);
-  pinMode(rand_btn, INPUT_PULLUP);
+  for(uint8_t i = 0; i<5; i++)
+  {
+    buttons[i] = Bounce();
+    buttons[i].interval(25);
+  }
+  buttons[0].attach(next_btn, INPUT_PULLUP);
+  buttons[1].attach(prev_btn, INPUT_PULLUP);
+  buttons[2].attach(option_btn, INPUT_PULLUP);
+  buttons[3].attach(select_btn, INPUT_PULLUP);
+  buttons[4].attach(rand_btn, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(next_btn), bISRnext, FALLING);
-  attachInterrupt(digitalPinToInterrupt(prev_btn), bISRprev, FALLING);
-  attachInterrupt(digitalPinToInterrupt(option_btn), bISRoption, FALLING);
-  attachInterrupt(digitalPinToInterrupt(select_btn), bISRselect, FALLING);
-  attachInterrupt(digitalPinToInterrupt(rand_btn), bISRrand, FALLING);
+  // pinMode(next_btn, INPUT_PULLUP);
+  // pinMode(prev_btn, INPUT_PULLUP);
+  // pinMode(option_btn, INPUT_PULLUP);
+  // pinMode(select_btn, INPUT_PULLUP);
+  // pinMode(rand_btn, INPUT_PULLUP);
+
+  // attachInterrupt(digitalPinToInterrupt(next_btn), bISRnext, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(prev_btn), bISRprev, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(option_btn), bISRoption, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(select_btn), bISRselect, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(rand_btn), bISRrand, FALLING);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
@@ -667,32 +682,32 @@ void handleButtons()
   //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
   
   //if(cur - prv >= 200) //Software debounce in mS for buttons
-  static unsigned long last_interrupt_time = 0;
-  unsigned long interrupt_time = millis();
-  // if(interrupt_time - last_interrupt_time > 200)
-  // {
-    switch (btnmap)
-    {
-      case 0b00110000: //prev
-        nav.doNav(navCmd(escCmd));
-      break;
-      case 0b00101000: //rand
-        nav.doNav(navCmd(upCmd));
-      break;
-      case 0b00100100: //next
-        nav.doNav(navCmd(enterCmd));
-      break;
-      case 0b00100010: //option
-        nav.doNav(navCmd(downCmd));
-      break;
-      case 0b00100001: //select
-        nav.doNav(navCmd(enterCmd));
-      break;
-    }
-    buttonLock = true;
-  //}
-  btnmap = 0; 
-  last_interrupt_time = interrupt_time;
+  // static unsigned long last_interrupt_time = 0;
+  // unsigned long interrupt_time = millis();
+  // // if(interrupt_time - last_interrupt_time > 200)
+  // // {
+  //   switch (btnmap)
+  //   {
+  //     case 0b00110000: //prev
+  //       nav.doNav(navCmd(escCmd));
+  //     break;
+  //     case 0b00101000: //rand
+  //       nav.doNav(navCmd(upCmd));
+  //     break;
+  //     case 0b00100100: //next
+  //       nav.doNav(navCmd(enterCmd));
+  //     break;
+  //     case 0b00100010: //option
+  //       nav.doNav(navCmd(downCmd));
+  //     break;
+  //     case 0b00100001: //select
+  //       nav.doNav(navCmd(enterCmd));
+  //     break;
+  //   }
+  //   buttonLock = true;
+  // //}
+  // btnmap = 0; 
+  // last_interrupt_time = interrupt_time;
 }
 
 unsigned long prv = 0;
@@ -714,8 +729,22 @@ void loop()
       prv = cur;
       buttonLock = false;
     }
-    if(bitRead(btnmap, 5)) //Button interrupt flag was set
-      handleButtons();
+
+    //Debounced buttons
+    for(uint8_t i = 0; i<5; i++)
+    {
+      buttons[i].update();
+    }
+    if(buttons[0].fell())
+      nav.doNav(navCmd(enterCmd));
+    if(buttons[1].fell())
+      nav.doNav(navCmd(escCmd));
+    if(buttons[2].fell())
+      nav.doNav(navCmd(downCmd));
+    if(buttons[3].fell())
+      nav.doNav(navCmd(enterCmd));
+    if(buttons[4].fell())
+      nav.doNav(navCmd(upCmd));
   }
   //Hit max loops and/or VGM exited
   if(playMode == SHUFFLE)
