@@ -29,6 +29,9 @@ extern "C" {
 #include "VGMEngine.h"
 
 const uint32_t MANIFEST_MAGIC = 0x12345678;
+#define MANIFEST_FILE_NAME ".MANIFEST"
+#define MANIFEST_DIR "_SYS/"
+#define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
 
 //Debug variables
 #define DEBUG true //Set this to true for a detailed printout of the header data & any errored command bytes
@@ -92,9 +95,9 @@ const char* constMEM hexNr[] MEMMODE={"0","x",hexDigit,hexDigit};
 char buf1[]="0x11";//<-- menu will edit this text
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
-#define fontName u8g2_font_profont12_mr   
+#define fontName u8g2_font_6x12_mr     
 #define fontX 6
-#define fontY 12
+#define fontY 14
 #define offsetX 0
 #define offsetY 0
 #define U8_Width 128
@@ -283,7 +286,7 @@ String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the
 {
   String selection;
   manifest.seek(0);
-  manifest.open("MANIFEST", O_READ);
+  manifest.open(MANIFEST_PATH, O_READ);
   manifest.readStringUntil('\n'); //Skip machine generated preamble
   uint32_t i = 0;
   while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
@@ -297,6 +300,7 @@ String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the
   }
   selection = manifest.readStringUntil('\n');
   selection.replace(String(index) + ":", "");
+  SD.chdir("/");
   return selection;
 }
 
@@ -322,13 +326,19 @@ void CreateManifest()
   //Last SD Free Space in KB (uint32_t BIN)
 
   FatFile d, f;
+  bool manifestOK = false;
   String path = "";
   char name[MAX_FILE_NAME_SIZE];
   Serial.println("Checking file manifest...");
 rebuild:
-  if(!SD.exists("MANIFEST"))
+
+  if(!SD.exists(MANIFEST_PATH) || !manifestOK)
   {
-    manifest.open("MANIFEST", O_RDWR | O_CREAT);
+    if(!SD.exists(MANIFEST_DIR))
+    {
+      SD.mkdir(MANIFEST_DIR);
+    }
+    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
     const uint32_t empty = 0x0;
     manifest.write(&MANIFEST_MAGIC, 4); //Magic #
     manifest.write(&empty, 4); //Total # files
@@ -336,7 +346,7 @@ rebuild:
     manifest.close();
   }
 
-  manifest.open("MANIFEST", O_READ);
+  manifest.open(MANIFEST_PATH, O_READ);
 
   manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
   if(readFile32(&manifest) != MANIFEST_MAGIC)
@@ -349,6 +359,7 @@ rebuild:
   else
   {
     Serial.println("MANIFEST MAGIC OK");
+    manifestOK = true;
   }
   
   manifest.seekEnd(-8);
@@ -366,7 +377,7 @@ rebuild:
     Serial.println("File changes detected! Re-indexing. Please wait...");
     manifest.close();
     manifest.remove();
-    manifest.open("MANIFEST", O_RDWR );
+    manifest.open(MANIFEST_PATH, O_RDWR );
     manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
     while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
     {
@@ -374,16 +385,27 @@ rebuild:
       {
         d.getName(name, MAX_FILE_NAME_SIZE);
         path = String(name);
+        if(path == MANIFEST_DIR) //Ignore the system file holding the manifest
+          continue;
         numberOfDirectories++;
         while(f.openNext(&d, O_READ)) //Once you're in a dir, go through each file and record them
         {
           f.getName(name, MAX_FILE_NAME_SIZE);
+          // if(strcmp(name, MANIFEST_FILE_NAME) == 0)
+          //   continue;
           //Serial.println(path + "/" + String(name)); //Replace with manifest file right
           manifest.print(numberOfFiles++);
           manifest.print(":");
           manifest.println(path + "/" + String(name));
           f.close();
         } 
+      }
+      else //Get any files in the root dir here
+      {
+        d.getName(name, MAX_FILE_NAME_SIZE);
+        manifest.print(numberOfFiles++);
+        manifest.print(":");
+        manifest.println(String(name));
       }
       d.close();
     }
@@ -624,7 +646,6 @@ void tick()
 //Poll the serial port
 void handleSerialIn()
 {
-  return;
   while(Serial.available())
   {
     pauseISR();
@@ -673,62 +694,12 @@ void handleSerialIn()
   setISR();
 }
 
-//Check for button input
-bool buttonLock = false;
-uint8_t counter = 0;
-void handleButtons()
-{
-  //btnmap
-  //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-  
-  //if(cur - prv >= 200) //Software debounce in mS for buttons
-  // static unsigned long last_interrupt_time = 0;
-  // unsigned long interrupt_time = millis();
-  // // if(interrupt_time - last_interrupt_time > 200)
-  // // {
-  //   switch (btnmap)
-  //   {
-  //     case 0b00110000: //prev
-  //       nav.doNav(navCmd(escCmd));
-  //     break;
-  //     case 0b00101000: //rand
-  //       nav.doNav(navCmd(upCmd));
-  //     break;
-  //     case 0b00100100: //next
-  //       nav.doNav(navCmd(enterCmd));
-  //     break;
-  //     case 0b00100010: //option
-  //       nav.doNav(navCmd(downCmd));
-  //     break;
-  //     case 0b00100001: //select
-  //       nav.doNav(navCmd(enterCmd));
-  //     break;
-  //   }
-  //   buttonLock = true;
-  // //}
-  // btnmap = 0; 
-  // last_interrupt_time = interrupt_time;
-}
-
-unsigned long prv = 0;
 void loop()
 {    
   while(!VGMEngine.play()) //needs to account for LOOP playmode
   {
-    unsigned long cur = millis();
-    if (nav.changed(0)) {//only draw if menu changed for gfx device
-      //change checking leaves more time for other tasks
-      u8g2.firstPage();
-      do nav.doOutput(); while(u8g2.nextPage());
-    }
-    //nav.poll();
     if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
       handleSerialIn();
-    if(cur - prv > 100)
-    {
-      prv = cur;
-      buttonLock = false;
-    }
 
     //Debounced buttons
     for(uint8_t i = 0; i<5; i++)
@@ -745,6 +716,15 @@ void loop()
       nav.doNav(navCmd(enterCmd));
     if(buttons[4].fell())
       nav.doNav(navCmd(upCmd));
+
+    //UI
+    if (nav.changed(0)) {//only draw if menu changed for gfx device
+      //change checking leaves more time for other tasks
+      u8g2.firstPage();
+      do nav.doOutput(); while(u8g2.nextPage());
+    }
+    //nav.poll();
+
   }
   //Hit max loops and/or VGM exited
   if(playMode == SHUFFLE)
@@ -769,6 +749,8 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         Serial.println(filePickMenu.selectedFile);
         Serial.print("from folder:");
         Serial.println(filePickMenu.selectedFolder);
+        if(filePickMenu.selectedFile == MANIFEST_FILE_NAME)
+          return proceed;
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
   //     break;
