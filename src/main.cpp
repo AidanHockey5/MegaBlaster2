@@ -435,7 +435,7 @@ void drawOLEDTrackInfo()
     u8g2.setDrawColor(1);
     u8g2.setPowerSave(0);
     u8g2.clearDisplay();
-    u8g2.setFont(u8g2_font_helvR08_te);
+    u8g2.setFont(u8g2_font_helvR08_tr);
     u8g2.sendBuffer();
     u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
     u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
@@ -672,23 +672,31 @@ void loop()
   }
 
   if(buttons[0].fell() && menuState == IN_MENU) //Next
-    {nav.doNav(navCmd(enterCmd));}
+  {
+    nav.doNav(navCmd(enterCmd));
+  }
   if(buttons[1].fell() && menuState == IN_MENU) //Prev
-    {nav.doNav(navCmd(escCmd));}
+  {
+    nav.doNav(navCmd(escCmd));
+  }
   if(buttons[2].fell() && menuState == IN_MENU) //Option
-    {nav.doNav(navCmd(downCmd));}
+  {
+    nav.doNav(navCmd(downCmd));
+  }
   if(buttons[3].fell())                         //Select
     {
-      if(menuState == IN_MENU)
+      if(menuState == IN_MENU) //If you're in the file-picker, the select button is used to enter dirs
         nav.doNav(navCmd(enterCmd)); 
-      else if(menuState == IN_VGM)
+      else if(menuState == IN_VGM) //Otherwise, you can use the select key to go back to the file picker where you left off
       {
-        nav.doNav(navCmd(escCmd)); 
+        nav.refresh();
         menuState = IN_MENU;
       }
     }
   if(buttons[4].fell() && menuState == IN_MENU)//Rand
-    {nav.doNav(navCmd(upCmd));}
+  {
+    nav.doNav(navCmd(upCmd));
+  }
 
   //UI
   if (nav.changed(0) && menuState == IN_MENU) {//only draw if menu changed for gfx device
