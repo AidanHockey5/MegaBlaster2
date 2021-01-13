@@ -29,7 +29,10 @@ bool VGMEngineClass::begin(File *f)
     ready = false;
     file = f;
     if(!header.read(file))
+    {
+        state = IDLE;
         return false;
+    }
     gd3.read(file, header.gd3Offset+0x14);
     
 
@@ -58,6 +61,7 @@ bool VGMEngineClass::begin(File *f)
     loopCount = 0;
     MegaStream_Reset(&stream);
     load();
+    state = PLAYING;
     ready = true;
     return true;
 }
@@ -217,18 +221,32 @@ void VGMEngineClass::tick()
     waitSamples--;      
 }
 
-bool VGMEngineClass::play()
+VGMEngineState VGMEngineClass::play()
 {
-    load(); 
-    while(waitSamples <= 0)
+    switch(state)
     {
-        isBusy = true;
-        waitSamples += parseVGM();
+    case IDLE:
+        return IDLE;
+    break;
+    case END_OF_TRACK:
+        state = IDLE;
+        return END_OF_TRACK;
+    break;
+    case PLAYING:
+        load(); 
+        while(waitSamples <= 0)
+        {
+            isBusy = true;
+            waitSamples += parseVGM();
+        }
+        isBusy = false;
+        if(loopCount == maxLoops)
+        {
+            state = END_OF_TRACK;
+        }
+        return PLAYING;
+    break;
     }
-    isBusy = false;
-    if(loopCount == maxLoops)
-        return true;
-    return false;
 }
 
 uint16_t VGMEngineClass::getLoops()

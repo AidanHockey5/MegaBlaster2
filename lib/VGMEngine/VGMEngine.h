@@ -16,6 +16,8 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define MAX_PCM_BUFFER_SIZE 8388607
 
+enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK};
+
 class VGMEngineClass
 {
 public:
@@ -35,9 +37,10 @@ public:
     #endif
     bool load(bool singleChunk = false);
     void tick();
-    bool play();
+    VGMEngineState play();
     uint16_t getLoops();
     uint16_t maxLoops = 3;
+    VGMEngineState state = IDLE;
     bool resetISR = false;
     bool isBusy = false;
     void ramtest();

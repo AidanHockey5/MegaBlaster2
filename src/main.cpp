@@ -10,9 +10,6 @@
 #include "menuIO/serialIO.h"
 #include "plugin/SdFatMenu.h"
 #include <menuIO/u8g2Out.h>
-// #include "menuIO/U8x8Out.h"
-// #include "U8x8lib.h"
-
 #include "YM2612.h"
 #include "SN76489.h"
 #include "Adafruit_ZeroTimer.h"
@@ -41,7 +38,8 @@ uint8_t failedCmd = 0x00;
 
 //Structs
 enum FileStrategy {FIRST_START, NEXT, PREV, RND, REQUEST};
-enum PlayMode {LOOP, PAUSE, SHUFFLE, IN_ORDER};
+enum PlayMode {LOOP, PAUSE, SHUFFLE_ALL, IN_ORDER, SHUFFLE_DIR};
+enum MenuState {IN_MENU, IN_VGM};
 
 //Prototypes
 void setup();
@@ -84,15 +82,7 @@ char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
 uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
-
-//OLED & Menus
-//u8x8
-// #define U8_Width 128
-// #define U8_Height 64
-// U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE);
-const char* constMEM hexDigit MEMMODE="0123456789ABCDEF";
-const char* constMEM hexNr[] MEMMODE={"0","x",hexDigit,hexDigit};
-char buf1[]="0x11";//<-- menu will edit this text
+String currentDir = "/";
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
@@ -119,7 +109,7 @@ SDMenuT<CachedFSO<SdFat,32>> filePickMenu(SD,"Music","/",filePick,enterEvent);
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
   ,OP("Something else...",doNothing,noEvent)
-  ,EXIT("<Back")
+  //,EXIT("<Back")
 );
 
 MENU_OUTPUTS(out,MAX_DEPTH
@@ -131,7 +121,7 @@ MENU_OUTPUTS(out,MAX_DEPTH
 serialIn serial(Serial);
 NAVROOT(nav,mainMenu,MAX_DEPTH,serial,out);
 
-//U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0);
+MenuState menuState = IN_MENU;
 
 bool isOledOn = true;
 
@@ -141,15 +131,7 @@ const int rand_btn = 48;    //PORT_PB01;
 const int next_btn = 49;    //PORT_PB04;
 const int option_btn = 50;  //PORT_PB05;
 const int select_btn = 19;  //PORT_PB09;
-
 Bounce buttons[5];
-
-//uint8_t btnmap = 0x0;       //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-// void bISRprev(){btnmap=0b00110000;}
-// void bISRrand(){btnmap=0b00101000;}
-// void bISRnext(){btnmap=0b00100100;}
-// void bISRoption(){btnmap=0b00100010;}
-// void bISRselect(){btnmap=0b00100001;}
 
 //Counters
 uint32_t bufferPos = 0;
@@ -163,7 +145,7 @@ uint8_t maxLoops = 3;
 bool fetching = false;
 volatile bool ready = false;
 bool samplePlaying = false;
-PlayMode playMode = SHUFFLE;
+PlayMode playMode = SHUFFLE_ALL;
 bool doParse = false;
 
 void setup()
@@ -202,26 +184,12 @@ void setup()
   buttons[3].attach(select_btn, INPUT_PULLUP);
   buttons[4].attach(rand_btn, INPUT_PULLUP);
 
-  // pinMode(next_btn, INPUT_PULLUP);
-  // pinMode(prev_btn, INPUT_PULLUP);
-  // pinMode(option_btn, INPUT_PULLUP);
-  // pinMode(select_btn, INPUT_PULLUP);
-  // pinMode(rand_btn, INPUT_PULLUP);
-
-  // attachInterrupt(digitalPinToInterrupt(next_btn), bISRnext, FALLING);
-  // attachInterrupt(digitalPinToInterrupt(prev_btn), bISRprev, FALLING);
-  // attachInterrupt(digitalPinToInterrupt(option_btn), bISRoption, FALLING);
-  // attachInterrupt(digitalPinToInterrupt(select_btn), bISRselect, FALLING);
-  // attachInterrupt(digitalPinToInterrupt(rand_btn), bISRrand, FALLING);
-
   //Set Chips
   VGMEngine.ym2612 = &opn;
   VGMEngine.sn76489 = &sn;
 
-  //u8x8 OLED
-  // u8x8.setBusClock(600000); //Overclock display, should only be 400KHz max, but we're little stinkers
-  // u8x8.begin();
-  // u8x8.setFont(u8x8_font_torussansbold8_r);
+  opn.reset();
+  sn.reset();
 
   //u8g2 OLED
   u8g2.begin();
@@ -257,23 +225,8 @@ void setup()
   CreateManifest();
 
   //Begin
-  startTrack(FIRST_START);
+  //startTrack(FIRST_START);
 }
-
-
-
-// void buttonISR()
-// {
-//   //Button map
-//   //[x][x][ACTIVE][PREV][RAND][NEXT][OPTION][SELECT]
-//   //btnmap = 0b00100000; //Set the 'active' flag to let the system know that a button has been pressed
-//   bitWrite(btnmap, 5, 1);
-//   bitWrite(btnmap, 4, !digitalRead(prev_btn));
-//   bitWrite(btnmap, 3, !digitalRead(rand_btn));
-//   bitWrite(btnmap, 2, !digitalRead(next_btn));
-//   bitWrite(btnmap, 1, !digitalRead(option_btn));
-//   bitWrite(btnmap, 0, !digitalRead(select_btn));
-// }
 
 uint32_t freeKB()
 {
@@ -367,9 +320,6 @@ rebuild:
 
   manifest.seekEnd(-4); //Read-in old manifest size
   uint32_t prevKB = readFile32(&manifest);
-
-  // Serial.print("Free: "); Serial.println(freeKB());
-  // Serial.print("File: "); Serial.println(prevKB);
 
   if(prevKB != freeKB()) //Used space mismatch. Most likely files have changed.
   {
@@ -479,39 +429,40 @@ void setISR()
 
 void drawOLEDTrackInfo()
 {
-  // ready = false;
-  // if(isOledOn)
-  // {
-  //   oled.setPowerSave(0);
-  //   oled.clearDisplay();
-  //   oled.setFont(u8g2_font_helvR08_te);
-  //   oled.sendBuffer();
-  //   oled.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
-  //   oled.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
-  //   oled.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
-  //   oled.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
-  //   String fileNumberData = "File: " + String(currentFileNumber+1) + "/" + String(numberOfFiles);
-  //   char* cstr;
-  //   cstr = &fileNumberData[0u];
-  //   oled.drawStr(0,50, cstr);
-  //   String playmodeStatus;
-  //   if(playMode == LOOP)
-  //     playmodeStatus = "LOOP";
-  //   else if(playMode == SHUFFLE)
-  //     playmodeStatus = "SHUFFLE";
-  //   else
-  //     playmodeStatus = "IN ORDER";
-  //   cstr = &playmodeStatus[0u];
-  //   oled.drawStr(0, 60, cstr);
-  //   oled.sendBuffer();
-  // }
-  // else
-  // {
-  //   oled.clearDisplay();
-  //   oled.setPowerSave(1);
-  //   oled.sendBuffer();
-  // }
-  // ready = true;
+  if(isOledOn)
+  {
+    u8g2.clearBuffer();
+    u8g2.setDrawColor(1);
+    u8g2.setPowerSave(0);
+    u8g2.clearDisplay();
+    u8g2.setFont(u8g2_font_helvR08_te);
+    u8g2.sendBuffer();
+    u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
+    u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
+    u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
+    u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+    //String fileNumberData = "File: " + String(currentFileNumber+1) + "/" + String(numberOfFiles);
+    char* cstr;
+    //cstr = &fileNumberData[0u];
+    //u8g2.drawStr(0,50, cstr);
+    String playmodeStatus;
+    if(playMode == LOOP)
+      playmodeStatus = "LOOP";
+    else if(playMode == SHUFFLE_ALL)
+      playmodeStatus = "SHUFFLE ALL";
+    else
+      playmodeStatus = "IN ORDER";
+    cstr = &playmodeStatus[0u];
+    u8g2.drawStr(0, 51, cstr);
+    u8g2.sendBuffer();
+  }
+  else
+  {
+    u8g2.clearDisplay();
+    u8g2.setPowerSave(1);
+    u8g2.sendBuffer();
+  }
+  u8g2.setFont(fontName);
 }
 
 //Mount file and prepare for playback. Returns true if file is found.
@@ -621,7 +572,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
       printlnw(VGMEngine.gd3.enTrackName);
       printlnw(VGMEngine.gd3.enSystemName);
       printlnw(VGMEngine.gd3.releaseDate);
-      drawOLEDTrackInfo();
+      if(menuState == IN_VGM)
+        drawOLEDTrackInfo();
       setISR();
       return true;
     }
@@ -662,12 +614,12 @@ void handleSerialIn()
         startTrack(RND);
       break;
       case '/':
-        playMode = SHUFFLE;
-        drawOLEDTrackInfo();
+        playMode = SHUFFLE_ALL;
+        //drawOLEDTrackInfo();
       break;
       case '.':
         playMode = LOOP;
-        drawOLEDTrackInfo();
+        //drawOLEDTrackInfo();
       break;
       case '?':
         printlnw(VGMEngine.gd3.enGameName);
@@ -677,7 +629,7 @@ void handleSerialIn()
       break;
       case '!':
         isOledOn = !isOledOn;
-        drawOLEDTrackInfo();
+        //drawOLEDTrackInfo();
       break;
       case 'r':
       {
@@ -696,41 +648,54 @@ void handleSerialIn()
 
 void loop()
 {    
-  while(!VGMEngine.play()) //needs to account for LOOP playmode
+  switch(VGMEngine.play())
   {
-    if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
-      handleSerialIn();
-
-    //Debounced buttons
-    for(uint8_t i = 0; i<5; i++)
-    {
-      buttons[i].update();
-    }
-    if(buttons[0].fell())
-      nav.doNav(navCmd(enterCmd));
-    if(buttons[1].fell())
-      nav.doNav(navCmd(escCmd));
-    if(buttons[2].fell())
-      nav.doNav(navCmd(downCmd));
-    if(buttons[3].fell())
-      nav.doNav(navCmd(enterCmd));
-    if(buttons[4].fell())
-      nav.doNav(navCmd(upCmd));
-
-    //UI
-    if (nav.changed(0)) {//only draw if menu changed for gfx device
-      //change checking leaves more time for other tasks
-      u8g2.firstPage();
-      do nav.doOutput(); while(u8g2.nextPage());
-    }
-    //nav.poll();
-
+    case VGMEngineState::IDLE:
+    break;
+    case VGMEngineState::END_OF_TRACK:
+      if(playMode == SHUFFLE_ALL)
+        startTrack(RND);
+      if(playMode == IN_ORDER)
+        startTrack(NEXT);
+    break;
+    case VGMEngineState::PLAYING:
+    break;
   }
-  //Hit max loops and/or VGM exited
-  if(playMode == SHUFFLE)
-    startTrack(RND);
-  if(playMode == IN_ORDER)
-    startTrack(NEXT);
+
+  if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
+    handleSerialIn();
+
+  //Debounced buttons
+  for(uint8_t i = 0; i<5; i++)
+  {
+    buttons[i].update();
+  }
+
+  if(buttons[0].fell() && menuState == IN_MENU) //Next
+    {nav.doNav(navCmd(enterCmd));}
+  if(buttons[1].fell() && menuState == IN_MENU) //Prev
+    {nav.doNav(navCmd(escCmd));}
+  if(buttons[2].fell() && menuState == IN_MENU) //Option
+    {nav.doNav(navCmd(downCmd));}
+  if(buttons[3].fell())                         //Select
+    {
+      if(menuState == IN_MENU)
+        nav.doNav(navCmd(enterCmd)); 
+      else if(menuState == IN_VGM)
+      {
+        nav.doNav(navCmd(escCmd)); 
+        menuState = IN_MENU;
+      }
+    }
+  if(buttons[4].fell() && menuState == IN_MENU)//Rand
+    {nav.doNav(navCmd(upCmd));}
+
+  //UI
+  if (nav.changed(0) && menuState == IN_MENU) {//only draw if menu changed for gfx device
+    //change checking leaves more time for other tasks
+    u8g2.firstPage();
+    do nav.doOutput(); while(u8g2.nextPage());
+  }
 }
 
 
@@ -744,13 +709,15 @@ result filePick(eventMask event, navNode& nav, prompt &item)
   // switch(event) {//for now events are filtered only for enter, so we dont need this checking
   //   case enterCmd:
       if (nav.root->navFocus==(navTarget*)&filePickMenu) {
-        Serial.println();
-        Serial.print("selected file:");
-        Serial.println(filePickMenu.selectedFile);
-        Serial.print("from folder:");
-        Serial.println(filePickMenu.selectedFolder);
+        // Serial.println();
+        // Serial.print("selected file:");
+        // Serial.println(filePickMenu.selectedFile);
+        // Serial.print("from folder:");
+        // Serial.println(filePickMenu.selectedFolder);
         if(filePickMenu.selectedFile == MANIFEST_FILE_NAME)
           return proceed;
+        menuState = IN_VGM;
+        currentDir = filePickMenu.selectedFolder;
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
   //     break;
