@@ -84,7 +84,7 @@ char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
 uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
-String currentDir = "/";
+String currentDir = "";
 uint32_t currentDirFileCount = 0;
 uint32_t currentDirFileIndex = 0;
 
@@ -542,26 +542,57 @@ bool startTrack(FileStrategy fileStrategy, String request)
   {
     case FIRST_START:
     {
-      // nextFile.openNext(SD.vwd(), O_READ);
-      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      // nextFile.close();
-      //fileName = GetPathFromManifest().c_str();
       filePath = GetPathFromManifest(0);
       currentFileNumber = 0;
     }
     break;
     case NEXT:
     {
-      if(currentFileNumber+1 >= numberOfFiles)
+      if(playMode == IN_ORDER)
       {
-          SD.vwd()->rewind();
-          currentFileNumber = 0;
+        SD.chdir(currentDir.c_str());
+        if(currentDirFileIndex+1 >= currentDirFileCount)
+        {
+          currentDirFileIndex = 0;
+        }
+        else
+          currentDirFileIndex++;
+        uint32_t index = 0;
+        while(nextFile.openNext(SD.vwd(), O_READ))
+        {
+          if(index == currentDirFileIndex)
+          {
+            if(nextFile.isDir())
+            {
+              if(currentDirFileIndex+1 >= currentDirFileCount)
+              {
+                currentDirFileIndex = 0;
+              }
+              else
+                currentDirFileIndex++;
+            }
+            else
+              break;
+          }
+          index++;
+          nextFile.close(); 
+        }
+        
+        nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+        nextFile.close();
+        filePath = currentDir + String(fileName);
       }
-      else
-          currentFileNumber++;
-      nextFile.openNext(SD.vwd(), O_READ);
-      nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      nextFile.close();
+
+      // if(currentFileNumber+1 >= numberOfFiles)
+      // {
+      //     SD.vwd()->rewind();
+      //     currentFileNumber = 0;
+      // }
+      // else
+      //     currentFileNumber++;
+      // nextFile.openNext(SD.vwd(), O_READ);
+      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+      // nextFile.close();
     }
     break;
     case PREV:
