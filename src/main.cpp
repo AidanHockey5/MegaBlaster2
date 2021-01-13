@@ -66,6 +66,8 @@ uint8_t VgmCommandLength(uint8_t Command);
 uint32_t readFile32(FatFile *f);
 uint16_t parseVGM();
 String GetPathFromManifest(uint32_t index);
+uint32_t countFilesInDir(String dir); 
+uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
 
 Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
 
@@ -83,6 +85,8 @@ uint32_t numberOfFiles = 0;
 uint32_t numberOfDirectories = 0;
 uint32_t currentFileNumber = 0;
 String currentDir = "/";
+uint32_t currentDirFileCount = 0;
+uint32_t currentDirFileIndex = 0;
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
@@ -145,7 +149,7 @@ uint8_t maxLoops = 3;
 bool fetching = false;
 volatile bool ready = false;
 bool samplePlaying = false;
-PlayMode playMode = SHUFFLE_ALL;
+PlayMode playMode = IN_ORDER;
 bool doParse = false;
 
 void setup()
@@ -238,8 +242,8 @@ uint32_t freeKB()
 String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the manifest file
 {
   String selection;
-  manifest.seek(0);
   manifest.open(MANIFEST_PATH, O_READ);
+  manifest.seek(0);
   manifest.readStringUntil('\n'); //Skip machine generated preamble
   uint32_t i = 0;
   while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
@@ -255,6 +259,63 @@ String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the
   selection.replace(String(index) + ":", "");
   SD.chdir("/");
   return selection;
+}
+
+//Returns the number of files in a directory
+uint32_t countFilesInDir(String dir) 
+{
+  SD.chdir(dir.c_str());
+  File countFile;
+  uint32_t count = 0;
+  char firstName[MAX_FILE_NAME_SIZE] = "";
+  char curName[MAX_FILE_NAME_SIZE] = "";
+  while (countFile.openNext(SD.vwd(), O_READ))
+  {
+    if(currentDirFileCount == 0) //Get the name of the first file in the dir
+      countFile.getName(firstName, MAX_FILE_NAME_SIZE);
+    else
+    {
+      countFile.getName(curName, MAX_FILE_NAME_SIZE);
+      if(strcmp(curName, firstName) == 0) //If the current file name is the same as the first, we've looped in our dir and we can exit
+      {
+        countFile.close();
+        SD.chdir("/"); //Go back to root
+        return count;
+      }
+    }
+    countFile.close();
+    count++;
+  }
+  SD.chdir("/");
+  return count;
+  //If the dir is empty, count will be 0
+}
+
+//Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
+uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize)
+{
+  SD.chdir(dir.c_str());
+  if(dirSize == 0)
+    dirSize = countFilesInDir(dir);
+  File countFile;
+  char curName[MAX_FILE_NAME_SIZE] = "";
+  char searchName[MAX_FILE_NAME_SIZE] = "";
+  fname.toCharArray(searchName, MAX_FILE_NAME_SIZE);
+  for(uint32_t i = 0; i<dirSize; i++)
+  {
+    countFile.openNext(SD.vwd(), O_READ);
+    countFile.getName(curName, MAX_FILE_NAME_SIZE);
+    if(strcmp(curName, searchName) == 0)
+    {
+        countFile.close();
+        SD.chdir("/");
+        return i;
+    }
+    countFile.close();
+  }
+  SD.chdir("/");
+  countFile.close();
+  return 0xFFFFFFFF; //Int max = error
 }
 
 uint32_t readFile32(FatFile *f)
@@ -441,19 +502,21 @@ void drawOLEDTrackInfo()
     u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
     u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
     u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
-    //String fileNumberData = "File: " + String(currentFileNumber+1) + "/" + String(numberOfFiles);
     char* cstr;
-    //cstr = &fileNumberData[0u];
-    //u8g2.drawStr(0,50, cstr);
     String playmodeStatus;
     if(playMode == LOOP)
       playmodeStatus = "LOOP";
     else if(playMode == SHUFFLE_ALL)
       playmodeStatus = "SHUFFLE ALL";
-    else
+    else if(playMode == IN_ORDER)
+    {
+      String fileNumberData = "Track: " + String(currentDirFileIndex+1) + "/" + String(currentDirFileCount);
+      cstr = &fileNumberData[0u];
+      u8g2.drawStr(0,50, cstr);
       playmodeStatus = "IN ORDER";
+    }
     cstr = &playmodeStatus[0u];
-    u8g2.drawStr(0, 51, cstr);
+    u8g2.drawStr(0, 60, cstr);
     u8g2.sendBuffer();
   }
   else
@@ -725,7 +788,17 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         if(filePickMenu.selectedFile == MANIFEST_FILE_NAME)
           return proceed;
         menuState = IN_VGM;
-        currentDir = filePickMenu.selectedFolder;
+        if(filePickMenu.selectedFolder != currentDir)
+        {
+          currentDir = filePickMenu.selectedFolder;
+          Serial.print("DIR COUNT: ");
+          currentDirFileCount = countFilesInDir(currentDir);
+          Serial.println(currentDirFileCount);
+        }
+        Serial.print("FILE INDEX: ");
+        currentDirFileIndex = getFileIndexInDir(filePickMenu.selectedFolder, filePickMenu.selectedFile, currentDirFileCount);
+        Serial.println(currentDirFileIndex);
+
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
   //     break;
