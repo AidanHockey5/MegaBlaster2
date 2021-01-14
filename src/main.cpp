@@ -25,11 +25,6 @@ extern "C" {
 
 #include "VGMEngine.h"
 
-const uint32_t MANIFEST_MAGIC = 0x12345678;
-#define MANIFEST_FILE_NAME ".MANIFEST"
-#define MANIFEST_DIR "_SYS/"
-#define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
-
 //Debug variables
 #define DEBUG true //Set this to true for a detailed printout of the header data & any errored command bytes
 #define DEBUG_LED A4
@@ -48,38 +43,31 @@ void handleSerialIn();
 void tick();
 void setISR();
 void pauseISR();
-void removeMeta();
-void prebufferLoop();
-void injectPrebuffer();
-void fillBuffer();
-bool topUpBuffer(); 
-void clearBuffers();
 void handleButtons();
 void prepareChips();
 void readGD3();
 void drawOLEDTrackInfo();
-void CreateManifest();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
 void showIndexProgressOLED();
-uint32_t freeKB();
 uint8_t VgmCommandLength(uint8_t Command);
-uint32_t readFile32(FatFile *f);
-uint16_t parseVGM();
 uint32_t countFilesInDir(String dir); 
 uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
 String getFilePathFromCurrentDirFileIndex();
+uint32_t readFile32(FatFile *f);
+String GetPathFromManifest(uint32_t index);
+uint32_t freeKB();
+void CreateManifest();
+void removeMeta();
 
-Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
-
-Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
-
-YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
-SN76489 sn(&bus, 2);
+const uint32_t MANIFEST_MAGIC = 0x12345678;
+#define MANIFEST_FILE_NAME ".MANIFEST"
+#define MANIFEST_DIR "_SYS/"
+#define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
 
 //SD & File Streaming
 SdFat SD;
-File file, manifest;
+static File file, manifest;
 #define MAX_FILE_NAME_SIZE 128
 char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
@@ -89,6 +77,15 @@ String currentDir = "";
 uint32_t currentDirFileCount = 0;
 uint32_t currentDirFileIndex = 0;
 uint32_t currentDirDirCount = 0; //How many directories are IN the current directory, mainly used for root only.
+
+uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifest file where the current files in the current dir are
+
+Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
+
+Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
+
+YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
+SN76489 sn(&bus, 2);
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
@@ -234,241 +231,6 @@ void setup()
   //startTrack(FIRST_START);
 }
 
-uint32_t freeKB()
-{
-  uint32_t kb = SD.vol()->freeClusterCount();
-  kb *= SD.vol()->blocksPerCluster()/2;
-  return kb;
-}
-
-String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the manifest file
-{
-  String selection;
-  manifest.open(MANIFEST_PATH, O_READ);
-  manifest.seek(0);
-  manifest.readStringUntil('\n'); //Skip machine generated preamble
-  uint32_t i = 0;
-  while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
-  {           //This part just skips every entry until we arrive to the line we want
-    if(i == index)
-      break;
-    if(manifest.read() == '\n')
-      i++;
-    if(i > numberOfFiles)
-      return "ERROR";
-  }
-  selection = manifest.readStringUntil('\n');
-  selection.replace(String(index) + ":", "");
-  SD.chdir("/");
-  return selection;
-}
-
-//Returns the number of files in a directory. Note that dirs will also increment the index
-uint32_t countFilesInDir(String dir) 
-{
-  SD.chdir(dir.c_str());
-  File countFile;
-  uint32_t count = 0;
-  currentDirDirCount = 0;
-  char firstName[MAX_FILE_NAME_SIZE] = "";
-  char curName[MAX_FILE_NAME_SIZE] = "";
-  while (countFile.openNext(SD.vwd(), O_READ))
-  {
-    if(currentDirFileCount == 0) //Get the name of the first file in the dir
-      countFile.getName(firstName, MAX_FILE_NAME_SIZE);
-    else
-    {
-      countFile.getName(curName, MAX_FILE_NAME_SIZE);
-      if(strcmp(curName, firstName) == 0) //If the current file name is the same as the first, we've looped in our dir and we can exit
-      {
-        countFile.close();
-        SD.chdir("/"); //Go back to root
-        return count;
-      }
-    }
-    if(countFile.isDir())
-      currentDirDirCount++;
-    count++;
-    countFile.close();
-  }
-  SD.chdir("/");
-  return count;
-  //If the dir is empty, count will be 0
-}
-
-//Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
-uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize)
-{
-  SD.chdir(dir.c_str());
-  if(dirSize == 0)
-    dirSize = countFilesInDir(dir);
-  File countFile;
-  char curName[MAX_FILE_NAME_SIZE] = "";
-  char searchName[MAX_FILE_NAME_SIZE] = "";
-  fname.toCharArray(searchName, MAX_FILE_NAME_SIZE);
-  for(uint32_t i = 0; i<dirSize; i++)
-  {
-    countFile.openNext(SD.vwd(), O_READ);
-    countFile.getName(curName, MAX_FILE_NAME_SIZE);
-    if(strcmp(curName, searchName) == 0)
-    {
-        countFile.close();
-        SD.chdir("/");
-        return i;
-    }
-    countFile.close();
-  }
-  SD.chdir("/");
-  countFile.close();
-  return 0xFFFFFFFF; //Int max = error
-}
-
-uint32_t readFile32(FatFile *f)
-{
-  uint32_t d = 0;
-  uint8_t v0 = f->read();
-  uint8_t v1 = f->read();
-  uint8_t v2 = f->read();
-  uint8_t v3 = f->read();
-  d = uint32_t(v0 + (v1 << 8) + (v2 << 16) + (v3 << 24));
-  return d;
-}
-
-void CreateManifest()
-{
-  //Manifest format
-  //Preamble (String)
-  //<file paths>(Strings)
-  //...
-  //Magic Number (uint32_t BIN)
-  //Total # files (uint32_t BIN)
-  //Last SD Free Space in KB (uint32_t BIN)
-  u8g2.clearBuffer();
-  u8g2.drawStr(0,16,"Indexing files");
-  u8g2.drawStr(0,32,"Please wait...");
-  u8g2.sendBuffer();
-  FatFile d, f;
-  uint32_t prevBlocks;
-  String path = "";
-  char name[MAX_FILE_NAME_SIZE];
-  Serial.println("Checking file manifest...");
-  bool createNewManifest = false;
-
-  if(!SD.exists(MANIFEST_PATH))
-    createNewManifest = true;
-  else
-  {
-    manifest.open(MANIFEST_PATH, O_READ | O_WRITE);
-    manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
-    if(readFile32(&manifest) != MANIFEST_MAGIC)
-    {
-      Serial.println("MANIFEST MAGIC BAD!");
-      createNewManifest = true;
-    }
-    else
-    {
-      Serial.println("MANIFEST MAGIC OK");
-      manifest.seekEnd(-8);
-      numberOfFiles = readFile32(&manifest);
-      Serial.println(numberOfFiles);
-      manifest.seekEnd(-4); //Read-in old manifest size
-      prevBlocks = readFile32(&manifest);
-      if(prevBlocks != SD.vol()->freeClusterCount())
-        createNewManifest = true;
-    }
-  }
-
-  if(createNewManifest)
-  {
-    if(!manifest.remove())
-    {
-      if(SD.exists(MANIFEST_PATH))
-        Serial.println("Failed to remove old file");
-    }
-    if(manifest.isOpen())
-      manifest.close();
-    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
-    numberOfFiles = 0;
-    prevBlocks = 0;
-
-    u8g2.drawStr(0,48,"Changes Detected...");
-    u8g2.drawStr(0,64,"Rebuilding Manifest...");
-    u8g2.sendBuffer();
-    Serial.println("File changes detected! Re-indexing. Please wait...");
-    manifest.seek(0);
-    manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
-    while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
-    {
-      if(d.isDir() && !d.isRoot()) //Include all dirs except root
-      {
-        d.getName(name, MAX_FILE_NAME_SIZE);
-        path = String(name);
-        if(path == MANIFEST_DIR) //Ignore the system file holding the manifest
-          continue;
-        numberOfDirectories++;
-        while(f.openNext(&d, O_READ)) //Once you're in a dir, go through each file and record them
-        {
-          f.getName(name, MAX_FILE_NAME_SIZE);
-          // if(strcmp(name, MANIFEST_FILE_NAME) == 0)
-          //   continue;
-          //Serial.println(path + "/" + String(name)); //Replace with manifest file right
-          manifest.print(numberOfFiles++);
-          manifest.print(":");
-          manifest.println(path + "/" + String(name));
-          f.close();
-        } 
-      }
-      else //Get any files in the root dir here
-      {
-        d.getName(name, MAX_FILE_NAME_SIZE);
-        manifest.print(numberOfFiles++);
-        manifest.print(":");
-        manifest.println(String(name));
-      }
-      d.close();
-    }
-    manifest.close();
-    manifest.open(MANIFEST_PATH, O_AT_END | O_WRITE);
-    uint32_t tmp = SD.vol()->freeClusterCount();
-    manifest.write(&MANIFEST_MAGIC, 4);
-    manifest.write(&numberOfFiles, 4);
-    manifest.write(&tmp, 4);
-  }
-  else
-    Serial.println("No change in files, continuing...");
-
-  manifest.close();
-  Serial.println("Indexing complete");
-  u8g2.clearDisplay();
-  u8g2.sendBuffer();
-}
-
-void removeMeta() //Remove useless meta files
-{
-  File tmpFile;
-  while ( tmpFile.openNext( SD.vwd(), O_READ ))
-  {
-    memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
-    tmpFile.getName(fileName, MAX_FILE_NAME_SIZE);
-    if(fileName[0]=='.')
-    {
-      if(!SD.remove(fileName))
-      if(!tmpFile.rmRfStar())
-      {
-        Serial.print("FAILED TO DELETE META FILE"); Serial.println(fileName);
-      }
-    }
-    if(String(fileName) == "System Volume Information")
-    {
-      if(!tmpFile.rmRfStar())
-        Serial.println("FAILED TO REMOVE SVI");
-    }
-    tmpFile.close();
-  }
-  tmpFile.close();
-  SD.vwd()->rewind();
-}
-
 void TC3_Handler() 
 {
   Adafruit_ZeroTimer::timerHandler(3);
@@ -539,37 +301,6 @@ void drawOLEDTrackInfo()
   u8g2.setFont(fontName);
 }
 
-String getFilePathFromCurrentDirFileIndex()
-{
-  uint32_t index = 0;
-  File nextFile;
-  SD.chdir(currentDir.c_str()); //Make sure the system is on the same dir we are
-  memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
-  while(nextFile.openNext(SD.vwd(), O_READ))
-  {
-    if(index == currentDirFileIndex) //This set of ifs is to account for dirs that might be in the root directory. We need to skip over those, so we'll just push the current index further if we encounter a dir
-    {
-      if(nextFile.isDir())
-      {
-        if(currentDirFileIndex+1 >= currentDirFileCount)
-        {
-          currentDirFileIndex = 0;
-        }
-        else
-          currentDirFileIndex++;
-      }
-      else
-        break; //Found the correct file
-    }
-    index++;
-    nextFile.close(); 
-  }
-
-  nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-  nextFile.close();
-  return currentDir + String(fileName);
-}
-
 //Mount file and prepare for playback. Returns true if file is found.
 bool startTrack(FileStrategy fileStrategy, String request)
 {
@@ -599,6 +330,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
         else
           currentDirFileIndex++;
         filePath = getFilePathFromCurrentDirFileIndex();
+        Serial.print("PICK: ");Serial.println(filePath);
       }
     }
     break;
@@ -737,12 +469,340 @@ void handleSerialIn()
         startTrack(REQUEST, req);
       }
       break;
+      // case 'x': //Just used for debugging
+      // {
+      //   startTrack(REQUEST, GetPathFromManifest(2040));
+      // }
+      // break;
       default:
         continue;
     }
   }
   Serial.flush();
   setISR();
+}
+
+//Returns the number of files in a directory. Note that dirs will also increment the index
+uint32_t countFilesInDir(String dir) 
+{
+  SD.chdir(dir.c_str());
+  File countFile;
+  uint32_t count = 0;
+  currentDirDirCount = 0;
+  char firstName[MAX_FILE_NAME_SIZE] = "";
+  char curName[MAX_FILE_NAME_SIZE] = "";
+  while (countFile.openNext(SD.vwd(), O_READ))
+  {
+    if(currentDirFileCount == 0) //Get the name of the first file in the dir
+      countFile.getName(firstName, MAX_FILE_NAME_SIZE);
+    else
+    {
+      countFile.getName(curName, MAX_FILE_NAME_SIZE);
+      if(strcmp(curName, firstName) == 0) //If the current file name is the same as the first, we've looped in our dir and we can exit
+      {
+        countFile.close();
+        SD.chdir("/"); //Go back to root
+        return count;
+      }
+    }
+    if(countFile.isDir())
+      currentDirDirCount++;
+    count++;
+    countFile.close();
+  }
+  SD.chdir("/");
+  return count;
+  //If the dir is empty, count will be 0
+}
+
+void getDirIndices(String dir, String fname)
+{
+  if(dir.startsWith("/"))
+    dir.replace("/", "");
+  if(dir == "")
+    dir = "~/";
+  Serial.print("INCOMING DIR: "); Serial.println(dir);
+  Serial.print("INCOMING FNAME: "); Serial.println(fname);
+  dirStartIndex = 0;
+  dirEndIndex = 0; 
+  dirCurIndex = 0;
+  manifest.open(MANIFEST_PATH, O_READ);
+  manifest.seek(0);
+  manifest.readStringUntil('\n'); //Skip machine generated preamble
+  for(uint32_t i = 0; i<numberOfFiles; i++)
+  {
+    String cur = manifest.readStringUntil('\n');
+    cur.replace(String(i)+":", "");
+    if(cur.startsWith(dir))
+    {
+      //Serial.print("X: ");serial.println(cur);
+      if(dirStartIndex == 0)
+      {
+        if(cur.endsWith(fname))
+          dirCurIndex = i;
+        dirStartIndex = i++;
+        do
+        {
+          cur = manifest.readStringUntil('\n');   
+          if((cur+'\n').endsWith(fname))
+            dirCurIndex = i;  
+          cur.replace(String(i++)+":", "");
+          //Serial.print("Y: "); Serial.println(cur);
+        } while (cur.startsWith(dir));
+        dirEndIndex = i-2;
+        Serial.print("START: "); Serial.println(dirStartIndex);
+        Serial.print("CURRENT: "); Serial.println(dirCurIndex);
+        Serial.print("END: "); Serial.println(dirEndIndex);
+        return;
+      }
+    }
+  }
+}
+
+//Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
+uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize)
+{
+  SD.chdir(dir.c_str());
+  if(dirSize == 0)
+    dirSize = countFilesInDir(dir);
+  File countFile;
+  char curName[MAX_FILE_NAME_SIZE] = "";
+  char searchName[MAX_FILE_NAME_SIZE] = "";
+  fname.toCharArray(searchName, MAX_FILE_NAME_SIZE);
+  for(uint32_t i = 0; i<dirSize; i++)
+  {
+    countFile.openNext(SD.vwd(), O_READ);
+    countFile.getName(curName, MAX_FILE_NAME_SIZE);
+    if(strcmp(curName, searchName) == 0)
+    {
+        countFile.close();
+        SD.chdir("/");
+        return i;
+    }
+    countFile.close();
+  }
+  SD.chdir("/");
+  countFile.close();
+  return 0xFFFFFFFF; //Int max = error
+}
+
+String getFilePathFromCurrentDirFileIndex()
+{
+  uint32_t index = 0;
+  File nextFile;
+  SD.chdir(currentDir.c_str()); //Make sure the system is on the same dir we are
+  memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
+  while(nextFile.openNext(SD.vwd(), O_READ))
+  {
+    if(index == currentDirFileIndex) //This set of ifs is to account for dirs that might be in the root directory. We need to skip over those, so we'll just push the current index further if we encounter a dir
+    {
+      if(nextFile.isDir())
+      {
+        if(currentDirFileIndex+1 >= currentDirFileCount)
+        {
+          currentDirFileIndex = 0;
+        }
+        else
+          currentDirFileIndex++;
+      }
+      else
+        break; //Found the correct file
+    }
+    index++;
+    nextFile.close(); 
+  }
+
+  nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+  nextFile.close();
+  return currentDir + String(fileName);
+}
+
+uint32_t readFile32(FatFile *f)
+{
+  uint32_t d = 0;
+  uint8_t v0 = f->read();
+  uint8_t v1 = f->read();
+  uint8_t v2 = f->read();
+  uint8_t v3 = f->read();
+  d = uint32_t(v0 + (v1 << 8) + (v2 << 16) + (v3 << 24));
+  return d;
+}
+
+String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the manifest file
+{
+  String selection;
+  manifest.open(MANIFEST_PATH, O_READ);
+  manifest.seek(0);
+  manifest.readStringUntil('\n'); //Skip machine generated preamble
+  uint32_t i = 0;
+  while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
+  {           //This part just skips every entry until we arrive to the line we want
+    if(i == index)
+      break;
+    if(manifest.read() == '\n')
+      i++;
+    if(i > numberOfFiles)
+      return "ERROR";
+  }
+  selection = manifest.readStringUntil('\n');
+  selection.replace(String(index) + ":", "");
+  selection.replace("~/", ""); //for root dirs
+  SD.chdir("/");
+  return selection;
+}
+
+uint32_t freeKB()
+{
+  uint32_t kb = SD.vol()->freeClusterCount();
+  kb *= SD.vol()->blocksPerCluster()/2;
+  return kb;
+}
+
+void CreateManifest()
+{
+  //Manifest format
+  //Preamble (String)
+  //<file paths>(Strings)
+  //...
+  //Magic Number (uint32_t BIN)
+  //Total # files (uint32_t BIN)
+  //Last SD Free Space in Blocks (uint32_t BIN)
+  u8g2.clearBuffer();
+  u8g2.drawStr(0,16,"Indexing files");
+  u8g2.drawStr(0,32,"Please wait...");
+  u8g2.sendBuffer();
+  FatFile d, f;
+  uint32_t prevBlocks;
+  String path = "";
+  char name[MAX_FILE_NAME_SIZE];
+  Serial.println("Checking file manifest...");
+  bool createNewManifest = false;
+
+  if(!SD.exists(MANIFEST_PATH))
+    createNewManifest = true;
+  else
+  {
+    manifest.open(MANIFEST_PATH, O_READ | O_WRITE);
+    manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
+    if(readFile32(&manifest) != MANIFEST_MAGIC)
+    {
+      Serial.println("MANIFEST MAGIC BAD!");
+      createNewManifest = true;
+    }
+    else
+    {
+      Serial.println("MANIFEST MAGIC OK");
+      manifest.seekEnd(-8);
+      numberOfFiles = readFile32(&manifest);
+      Serial.println(numberOfFiles);
+      manifest.seekEnd(-4); //Read-in old manifest size
+      prevBlocks = readFile32(&manifest);
+      if(prevBlocks != SD.vol()->freeClusterCount())
+        createNewManifest = true;
+    }
+  }
+
+  if(createNewManifest)
+  {
+    if(!manifest.remove())
+    {
+      if(SD.exists(MANIFEST_PATH))
+        Serial.println("Failed to remove old file");
+    }
+    if(manifest.isOpen())
+      manifest.close();
+    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
+    numberOfFiles = 0;
+    prevBlocks = 0;
+
+    u8g2.drawStr(0,48,"Changes Detected...");
+    u8g2.drawStr(0,64,"Rebuilding Manifest...");
+    u8g2.sendBuffer();
+    Serial.println("File changes detected! Re-indexing. Please wait...");
+    manifest.seek(0);
+    manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
+    while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
+    {
+      if(d.isDir() && !d.isRoot()) //Include all dirs except root
+      {
+        d.getName(name, MAX_FILE_NAME_SIZE);
+        path = String(name);
+        if(path == MANIFEST_DIR) //Ignore the system file holding the manifest
+          continue;
+        numberOfDirectories++;
+        while(f.openNext(&d, O_READ)) //Once you're in a dir, go through each file and record them
+        {
+          f.getName(name, MAX_FILE_NAME_SIZE);
+          // if(strcmp(name, MANIFEST_FILE_NAME) == 0)
+          //   continue;
+          //Serial.println(path + "/" + String(name)); //Replace with manifest file right
+          manifest.print(numberOfFiles++);
+          manifest.print(":");
+          manifest.println(path + "/" + String(name));
+          f.close();
+        } 
+      }
+      // else //Get any files in the root dir here
+      // {
+        // d.getName(name, MAX_FILE_NAME_SIZE);
+        // manifest.print(numberOfFiles++);
+        // manifest.print(":");
+        // manifest.println(String(name));
+      // }
+      d.close();
+    }
+    SD.vwd()->rewind();
+    while(d.openNext(SD.vwd(), O_READ)) //Handle files in root separatly at the end to keep them in order
+    {
+      if(!d.isDir() && !d.isRoot())
+      {
+        d.getName(name, MAX_FILE_NAME_SIZE);
+        manifest.print(numberOfFiles++);
+        manifest.print(":~/");
+        manifest.println(String(name));
+      }
+      d.close();
+    }
+    manifest.close();
+    manifest.open(MANIFEST_PATH, O_AT_END | O_WRITE);
+    uint32_t tmp = SD.vol()->freeClusterCount();
+    manifest.write(&MANIFEST_MAGIC, 4);
+    manifest.write(&numberOfFiles, 4);
+    manifest.write(&tmp, 4);
+  }
+  else
+    Serial.println("No change in files, continuing...");
+
+  manifest.close();
+  Serial.println("Indexing complete");
+  u8g2.clearDisplay();
+  u8g2.sendBuffer();
+}
+
+void removeMeta() //Remove useless meta files
+{
+  File tmpFile;
+  while ( tmpFile.openNext( SD.vwd(), O_READ ))
+  {
+    memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
+    tmpFile.getName(fileName, MAX_FILE_NAME_SIZE);
+    if(fileName[0]=='.')
+    {
+      if(!SD.remove(fileName))
+      if(!tmpFile.rmRfStar())
+      {
+        Serial.print("FAILED TO DELETE META FILE"); Serial.println(fileName);
+      }
+    }
+    if(String(fileName) == "System Volume Information")
+    {
+      if(!tmpFile.rmRfStar())
+        Serial.println("FAILED TO REMOVE SVI");
+    }
+    tmpFile.close();
+  }
+  tmpFile.close();
+  SD.vwd()->rewind();
 }
 
 void loop()
@@ -761,7 +821,7 @@ void loop()
     break;
   }
 
-  if(Serial.available() > 0) //NOTE TO SELF: YOU HAVE PAUSE THIS FUNCTION WITH A RETURN FOR NOW, MAKE SURE TO REENABLE IT!!! IT'S NOT BROKEN YOU BIG GOOF
+  if(Serial.available() > 0) 
     handleSerialIn();
 
   //Debounced buttons
@@ -848,6 +908,8 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         Serial.println(currentDirFileIndex);
         Serial.print("DIR COUNT: ");
         Serial.println(currentDirDirCount);
+
+        getDirIndices(filePickMenu.selectedFolder, filePickMenu.selectedFile);
 
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
