@@ -517,13 +517,14 @@ uint32_t countFilesInDir(String dir)
 
 void getDirIndices(String dir, String fname)
 {
+  fname += '\r'; //stupid invisible carriage return
   if(dir.startsWith("/"))
     dir.replace("/", "");
   if(dir == "")
     dir = "~/";
   Serial.print("INCOMING DIR: "); Serial.println(dir);
   Serial.print("INCOMING FNAME: "); Serial.println(fname);
-  dirStartIndex = 0;
+  dirStartIndex = 0xFFFFFFFF;
   dirEndIndex = 0; 
   dirCurIndex = 0;
   manifest.open(MANIFEST_PATH, O_READ);
@@ -535,28 +536,20 @@ void getDirIndices(String dir, String fname)
     cur.replace(String(i)+":", "");
     if(cur.startsWith(dir))
     {
-      //Serial.print("X: ");serial.println(cur);
-      if(dirStartIndex == 0)
-      {
-        if(cur.endsWith(fname))
-          dirCurIndex = i;
-        dirStartIndex = i++;
-        do
-        {
-          cur = manifest.readStringUntil('\n');   
-          if((cur+'\n').endsWith(fname))
-            dirCurIndex = i;  
-          cur.replace(String(i++)+":", "");
-          //Serial.print("Y: "); Serial.println(cur);
-        } while (cur.startsWith(dir));
-        dirEndIndex = i-2;
-        Serial.print("START: "); Serial.println(dirStartIndex);
-        Serial.print("CURRENT: "); Serial.println(dirCurIndex);
-        Serial.print("END: "); Serial.println(dirEndIndex);
-        return;
-      }
+      if(dirStartIndex == 0xFFFFFFFF)
+        dirStartIndex = i;
+      if(cur.endsWith(fname)) 
+        dirCurIndex = i;
+      dirEndIndex = i;
+    }
+    else if(dirStartIndex != 0xFFFFFFFF)
+    {
+      break;
     }
   }
+  Serial.print("START: "); Serial.println(dirStartIndex);
+  Serial.print("CURRENT: "); Serial.println(dirCurIndex);
+  Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
 //Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
