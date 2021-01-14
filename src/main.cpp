@@ -61,13 +61,14 @@ void drawOLEDTrackInfo();
 void CreateManifest();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
+void showIndexProgressOLED();
 uint32_t freeKB();
 uint8_t VgmCommandLength(uint8_t Command);
 uint32_t readFile32(FatFile *f);
 uint16_t parseVGM();
-String GetPathFromManifest(uint32_t index);
 uint32_t countFilesInDir(String dir); 
 uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
+String getFilePathFromCurrentDirFileIndex();
 
 Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
 
@@ -87,6 +88,7 @@ uint32_t currentFileNumber = 0;
 String currentDir = "";
 uint32_t currentDirFileCount = 0;
 uint32_t currentDirFileIndex = 0;
+uint32_t currentDirDirCount = 0; //How many directories are IN the current directory, mainly used for root only.
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
@@ -261,12 +263,13 @@ String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the
   return selection;
 }
 
-//Returns the number of files in a directory
+//Returns the number of files in a directory. Note that dirs will also increment the index
 uint32_t countFilesInDir(String dir) 
 {
   SD.chdir(dir.c_str());
   File countFile;
   uint32_t count = 0;
+  currentDirDirCount = 0;
   char firstName[MAX_FILE_NAME_SIZE] = "";
   char curName[MAX_FILE_NAME_SIZE] = "";
   while (countFile.openNext(SD.vwd(), O_READ))
@@ -283,8 +286,10 @@ uint32_t countFilesInDir(String dir)
         return count;
       }
     }
-    countFile.close();
+    if(countFile.isDir())
+      currentDirDirCount++;
     count++;
+    countFile.close();
   }
   SD.chdir("/");
   return count;
@@ -338,57 +343,59 @@ void CreateManifest()
   //Magic Number (uint32_t BIN)
   //Total # files (uint32_t BIN)
   //Last SD Free Space in KB (uint32_t BIN)
-
+  u8g2.clearBuffer();
+  u8g2.drawStr(0,16,"Indexing files");
+  u8g2.drawStr(0,32,"Please wait...");
+  u8g2.sendBuffer();
   FatFile d, f;
-  bool manifestOK = false;
+  uint32_t prevBlocks;
   String path = "";
   char name[MAX_FILE_NAME_SIZE];
   Serial.println("Checking file manifest...");
-rebuild:
+  bool createNewManifest = false;
 
-  if(!SD.exists(MANIFEST_PATH) || !manifestOK)
-  {
-    if(!SD.exists(MANIFEST_DIR))
-    {
-      SD.mkdir(MANIFEST_DIR);
-    }
-    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
-    const uint32_t empty = 0x0;
-    manifest.write(&MANIFEST_MAGIC, 4); //Magic #
-    manifest.write(&empty, 4); //Total # files
-    manifest.write(&empty, 4); //Last free space
-    manifest.close();
-  }
-
-  manifest.open(MANIFEST_PATH, O_READ);
-
-  manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
-  if(readFile32(&manifest) != MANIFEST_MAGIC)
-  {
-    Serial.println("MANIFEST MAGIC BAD!");
-    manifest.remove();
-    manifest.close();
-    goto rebuild;
-  }
+  if(!SD.exists(MANIFEST_PATH))
+    createNewManifest = true;
   else
   {
-    Serial.println("MANIFEST MAGIC OK");
-    manifestOK = true;
+    manifest.open(MANIFEST_PATH, O_READ | O_WRITE);
+    manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
+    if(readFile32(&manifest) != MANIFEST_MAGIC)
+    {
+      Serial.println("MANIFEST MAGIC BAD!");
+      createNewManifest = true;
+    }
+    else
+    {
+      Serial.println("MANIFEST MAGIC OK");
+      manifest.seekEnd(-8);
+      numberOfFiles = readFile32(&manifest);
+      Serial.println(numberOfFiles);
+      manifest.seekEnd(-4); //Read-in old manifest size
+      prevBlocks = readFile32(&manifest);
+      if(prevBlocks != SD.vol()->freeClusterCount())
+        createNewManifest = true;
+    }
   }
-  
-  manifest.seekEnd(-8);
-  numberOfFiles = readFile32(&manifest);
 
-  manifest.seekEnd(-4); //Read-in old manifest size
-  uint32_t prevKB = readFile32(&manifest);
-
-  if(prevKB != freeKB()) //Used space mismatch. Most likely files have changed.
+  if(createNewManifest)
   {
+    if(!manifest.remove())
+    {
+      if(SD.exists(MANIFEST_PATH))
+        Serial.println("Failed to remove old file");
+    }
+    if(manifest.isOpen())
+      manifest.close();
+    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
     numberOfFiles = 0;
+    prevBlocks = 0;
+
+    u8g2.drawStr(0,48,"Changes Detected...");
+    u8g2.drawStr(0,64,"Rebuilding Manifest...");
+    u8g2.sendBuffer();
     Serial.println("File changes detected! Re-indexing. Please wait...");
-    manifest.close();
-    manifest.remove();
-    manifest.open(MANIFEST_PATH, O_RDWR );
+    manifest.seek(0);
     manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
     while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
     {
@@ -420,7 +427,9 @@ rebuild:
       }
       d.close();
     }
-    uint32_t tmp = freeKB();
+    manifest.close();
+    manifest.open(MANIFEST_PATH, O_AT_END | O_WRITE);
+    uint32_t tmp = SD.vol()->freeClusterCount();
     manifest.write(&MANIFEST_MAGIC, 4);
     manifest.write(&numberOfFiles, 4);
     manifest.write(&tmp, 4);
@@ -430,6 +439,8 @@ rebuild:
 
   manifest.close();
   Serial.println("Indexing complete");
+  u8g2.clearDisplay();
+  u8g2.sendBuffer();
 }
 
 void removeMeta() //Remove useless meta files
@@ -510,7 +521,7 @@ void drawOLEDTrackInfo()
       playmodeStatus = "SHUFFLE ALL";
     else if(playMode == IN_ORDER)
     {
-      String fileNumberData = "Track: " + String(currentDirFileIndex+1) + "/" + String(currentDirFileCount);
+      String fileNumberData = "Track: " + String((currentDirFileIndex+1)-currentDirDirCount) + "/" + String(currentDirFileCount-currentDirDirCount);
       cstr = &fileNumberData[0u];
       u8g2.drawStr(0,50, cstr);
       playmodeStatus = "IN ORDER";
@@ -526,6 +537,37 @@ void drawOLEDTrackInfo()
     u8g2.sendBuffer();
   }
   u8g2.setFont(fontName);
+}
+
+String getFilePathFromCurrentDirFileIndex()
+{
+  uint32_t index = 0;
+  File nextFile;
+  SD.chdir(currentDir.c_str()); //Make sure the system is on the same dir we are
+  memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
+  while(nextFile.openNext(SD.vwd(), O_READ))
+  {
+    if(index == currentDirFileIndex) //This set of ifs is to account for dirs that might be in the root directory. We need to skip over those, so we'll just push the current index further if we encounter a dir
+    {
+      if(nextFile.isDir())
+      {
+        if(currentDirFileIndex+1 >= currentDirFileCount)
+        {
+          currentDirFileIndex = 0;
+        }
+        else
+          currentDirFileIndex++;
+      }
+      else
+        break; //Found the correct file
+    }
+    index++;
+    nextFile.close(); 
+  }
+
+  nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+  nextFile.close();
+  return currentDir + String(fileName);
 }
 
 //Mount file and prepare for playback. Returns true if file is found.
@@ -550,76 +592,39 @@ bool startTrack(FileStrategy fileStrategy, String request)
     {
       if(playMode == IN_ORDER)
       {
-        SD.chdir(currentDir.c_str());
         if(currentDirFileIndex+1 >= currentDirFileCount)
         {
           currentDirFileIndex = 0;
         }
         else
           currentDirFileIndex++;
-        uint32_t index = 0;
-        while(nextFile.openNext(SD.vwd(), O_READ))
-        {
-          if(index == currentDirFileIndex)
-          {
-            if(nextFile.isDir())
-            {
-              if(currentDirFileIndex+1 >= currentDirFileCount)
-              {
-                currentDirFileIndex = 0;
-              }
-              else
-                currentDirFileIndex++;
-            }
-            else
-              break;
-          }
-          index++;
-          nextFile.close(); 
-        }
-        
-        nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-        nextFile.close();
-        filePath = currentDir + String(fileName);
+        filePath = getFilePathFromCurrentDirFileIndex();
       }
-
-      // if(currentFileNumber+1 >= numberOfFiles)
-      // {
-      //     SD.vwd()->rewind();
-      //     currentFileNumber = 0;
-      // }
-      // else
-      //     currentFileNumber++;
-      // nextFile.openNext(SD.vwd(), O_READ);
-      // nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-      // nextFile.close();
     }
     break;
     case PREV:
     {
-      if(currentFileNumber != 0)
+      if(playMode == IN_ORDER)
       {
-        currentFileNumber--;
-        SD.vwd()->rewind();
-        for(uint32_t i = 0; i<=currentFileNumber; i++)
+        if(currentDir == "/") //You need to account for directories inside of root counting as file entries
         {
-          nextFile.close();
-          nextFile.openNext(SD.vwd(), O_READ);
+          if(currentDirFileIndex-currentDirDirCount != 0)
+          {
+            currentDirFileIndex--;
+          }
+          else
+            currentDirFileIndex = currentDirFileCount-1;
         }
-        nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-        nextFile.close();
-      }
-      else
-      {
-        currentFileNumber = numberOfFiles-1;
-        SD.vwd()->rewind();
-        for(uint32_t i = 0; i<=currentFileNumber; i++)
+        else //Otherwise, picking a previous file similar, but doesn't worry about directories. This is unsafe. If the user adds a dir inside of a dir, the system won't know what to do.
         {
-          nextFile.close();
-          nextFile.openNext(SD.vwd(), O_READ);
+          if(currentDirFileIndex != 0)
+          {
+            currentDirFileIndex--;
+          }
+          else
+            currentDirFileIndex = currentDirFileCount-1;
         }
-        nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-        nextFile.close();
+        filePath = getFilePathFromCurrentDirFileIndex();
       }
     }
     break;
@@ -765,13 +770,25 @@ void loop()
     buttons[i].update();
   }
 
-  if(buttons[0].fell() && menuState == IN_MENU) //Next
+  if(buttons[0].fell()) //Next
   {
-    nav.doNav(navCmd(enterCmd));
+    if(menuState == IN_MENU)
+      nav.doNav(navCmd(enterCmd));
+    else if(menuState == IN_VGM)
+    {
+      if(playMode == IN_ORDER)
+        startTrack(NEXT);
+    }
   }
-  if(buttons[1].fell() && menuState == IN_MENU) //Prev
+  if(buttons[1].fell()) //Prev
   {
-    nav.doNav(navCmd(escCmd));
+    if(menuState == IN_MENU)
+        nav.doNav(navCmd(escCmd));
+    else if(menuState == IN_VGM)
+    {
+      if(playMode == IN_ORDER)
+        startTrack(PREV);
+    }
   }
   if(buttons[2].fell() && menuState == IN_MENU) //Option
   {
@@ -822,13 +839,15 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         if(filePickMenu.selectedFolder != currentDir)
         {
           currentDir = filePickMenu.selectedFolder;
-          Serial.print("DIR COUNT: ");
+          Serial.print("ENTRY COUNT: ");
           currentDirFileCount = countFilesInDir(currentDir);
           Serial.println(currentDirFileCount);
         }
         Serial.print("FILE INDEX: ");
         currentDirFileIndex = getFileIndexInDir(filePickMenu.selectedFolder, filePickMenu.selectedFile, currentDirFileCount);
         Serial.println(currentDirFileIndex);
+        Serial.print("DIR COUNT: ");
+        Serial.println(currentDirDirCount);
 
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
