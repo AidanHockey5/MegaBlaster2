@@ -30,7 +30,7 @@ bool VGMEngineClass::begin(File *f)
     file = f;
     if(!header.read(file))
     {
-        state = IDLE;
+        state = END_OF_TRACK;
         return false;
     }
     gd3.read(file, header.gd3Offset+0x14);

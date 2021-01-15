@@ -59,8 +59,12 @@ uint32_t readFile32(FatFile *f);
 String GetPathFromManifest(uint32_t index);
 void getDirIndices(String dir, String fname);
 uint32_t freeKB();
-void CreateManifest();
+void CreateManifest(bool createNew = false);
+result filePick(eventMask event, navNode& nav, prompt &item);
+result doCreateManifest(); //Required for UI
+result onMenuIdle(menuOut& o, idleEvent e);
 void removeMeta();
+void clearRandomHistory();
 
 const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
@@ -90,6 +94,15 @@ Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
 SN76489 sn(&bus, 2);
 
+//VGM Variables
+uint16_t loopCount = 0;
+uint8_t maxLoops = 3;
+bool fetching = false;
+volatile bool ready = false;
+bool samplePlaying = false;
+PlayMode playMode = IN_ORDER;
+bool doParse = false;
+
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
 #define fontX 6
@@ -108,13 +121,20 @@ const colorDef<uint8_t> colors[6] MEMMODE={
 };
 
 using namespace Menu;
-result filePick(eventMask event, navNode& nav, prompt &item);
 SDMenuT<CachedFSO<SdFat,32>> filePickMenu(SD,"Music","/",filePick,enterEvent);
+
+CHOOSE(playMode,modeMenu,"Mode:",doNothing,noEvent,noStyle
+  ,VALUE("Loop",PlayMode::LOOP,doNothing,noEvent)
+  ,VALUE("In Order",PlayMode::IN_ORDER,doNothing,noEvent)
+  ,VALUE("Shuffle All",PlayMode::SHUFFLE_ALL,doNothing,noEvent)
+  ,VALUE("Shuffle Dir",PlayMode::SHUFFLE_DIR,doNothing,noEvent)
+);
 
 #define MAX_DEPTH 2
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
-  ,OP("Something else...",doNothing,noEvent)
+  ,SUBMENU(modeMenu)
+  ,OP("Rebuild Manifest",doCreateManifest,enterEvent)
   //,EXIT("<Back")
 );
 
@@ -144,15 +164,6 @@ uint32_t bufferPos = 0;
 uint32_t cmdPos = 0;
 uint16_t waitSamples = 0;
 uint32_t pcmBufferPosition = 0;
-
-//VGM Variables
-uint16_t loopCount = 0;
-uint8_t maxLoops = 3;
-bool fetching = false;
-volatile bool ready = false;
-bool samplePlaying = false;
-PlayMode playMode = IN_ORDER;
-bool doParse = false;
 
 void setup()
 {
@@ -215,10 +226,10 @@ void setup()
   if(!SD.begin(PORT_PA15, SPI_FULL_SPEED))
   {
     Serial.println("SD Mount Failed!");
-    // oled.clearBuffer();
-    // oled.drawStr(0,16,"SD Mount");
-    // oled.drawStr(0,32,"failed!");
-    // oled.sendBuffer();
+    u8g2.clearBuffer();
+    u8g2.drawStr(0,16,"SD Mount");
+    u8g2.drawStr(0,32,"failed!");
+    u8g2.sendBuffer();
     while(true){Serial.println("SD MOUNT FAILED"); delay(1000);}
   }
   filePickMenu.begin();
@@ -230,8 +241,8 @@ void setup()
   removeMeta();
   CreateManifest();
 
-  //Begin
-  //startTrack(FIRST_START);
+  nav.timeOut=5;
+  nav.idleTask = onMenuIdle;
 }
 
 void TC3_Handler() 
@@ -284,6 +295,8 @@ void drawOLEDTrackInfo()
       playmodeStatus = "LOOP";
     else if(playMode == SHUFFLE_ALL)
       playmodeStatus = "SHUFFLE ALL";
+    else if(playMode == SHUFFLE_DIR)
+      playmodeStatus = "SHUFFLE DIR";
     else if(playMode == IN_ORDER)
     {
       String fileNumberData = "Track: " + String(dirCurIndex-dirStartIndex) + "/" + String(dirEndIndex-dirStartIndex); 
@@ -331,11 +344,11 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex = dirStartIndex;
         filePath = GetPathFromManifest(dirCurIndex);
       }
-      else if(playMode == SHUFFLE_ALL)
+      else if(playMode == SHUFFLE_ALL || SHUFFLE_DIR)
       {
-        if(randIndex == randList.size()-1) //End of random list, generate new random track and add to list
+        if(randIndex == randList.size()-1 || randList.size() == 0) //End of random list, generate new random track and add to list
         {
-          uint32_t rng = random(numberOfFiles-1);
+          uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
           randList.add(rng);
           randIndex = randList.size()-1;
           filePath = GetPathFromManifest(rng);
@@ -345,6 +358,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randIndex++;
           filePath = GetPathFromManifest(randList.get(randIndex));
         }
+        dirCurIndex = randIndex;
       }
     }
     break;
@@ -358,28 +372,25 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex = dirEndIndex;
         filePath = GetPathFromManifest(dirCurIndex);
       }
-      else if(playMode == SHUFFLE_ALL)
+      else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
-        if(randIndex == 0) //Reached end of list
-        {
-          filePath = GetPathFromManifest(randList.get(randIndex));
-        }
-        else //Go back in history
+        if(randIndex != 0) //If you're not at the end of the history list, go back in history
         {
           randIndex--;
-          filePath = GetPathFromManifest(randList.get(randIndex));
         }
-        
+        filePath = GetPathFromManifest(randList.get(randIndex));
+        dirCurIndex = randIndex;
       }
     }
     break;
     case RND:
-    { //This request will disrupt the correct history and immediatly create a new node at the end of the random history list
+    { //This request will disrupt the random history and immediatly create a new node at the end of the random history list
       playMode = SHUFFLE_ALL; 
       uint32_t rng = random(numberOfFiles-1);
       randList.add(rng);
       randIndex = randList.size()-1;
       filePath = GetPathFromManifest(rng);
+      dirCurIndex = rng;
     }
     break;
     case REQUEST:
@@ -500,6 +511,12 @@ void handleSerialIn()
   }
   Serial.flush();
   setISR();
+}
+
+void clearRandomHistory()
+{
+  randList.clear();
+  randIndex = 0;
 }
 
 //Returns the number of files in a directory. Note that dirs will also increment the index
@@ -671,7 +688,7 @@ uint32_t freeKB()
   return kb;
 }
 
-void CreateManifest()
+void CreateManifest(bool createNew)
 {
   //Manifest format
   //Preamble (String)
@@ -681,6 +698,7 @@ void CreateManifest()
   //Total # files (uint32_t BIN)
   //Last SD Free Space in Blocks (uint32_t BIN)
   u8g2.clearBuffer();
+  u8g2.setDrawColor(1);
   u8g2.drawStr(0,16,"Indexing files");
   u8g2.drawStr(0,32,"Please wait...");
   u8g2.sendBuffer();
@@ -689,8 +707,9 @@ void CreateManifest()
   String path = "";
   char name[MAX_FILE_NAME_SIZE];
   Serial.println("Checking file manifest...");
-  bool createNewManifest = false;
+  bool createNewManifest = createNew;
 
+  SD.chdir("/");
   if(!SD.exists(MANIFEST_PATH))
     createNewManifest = true;
   else
@@ -790,6 +809,7 @@ void CreateManifest()
   Serial.println("Indexing complete");
   u8g2.clearDisplay();
   u8g2.sendBuffer();
+  nav.refresh();
 }
 
 void removeMeta() //Remove useless meta files
@@ -825,9 +845,7 @@ void loop()
     case VGMEngineState::IDLE:
     break;
     case VGMEngineState::END_OF_TRACK:
-      if(playMode == SHUFFLE_ALL)
-        startTrack(RND);
-      if(playMode == IN_ORDER)
+      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
         startTrack(NEXT);
     break;
     case VGMEngineState::PLAYING:
@@ -849,7 +867,7 @@ void loop()
       nav.doNav(navCmd(enterCmd));
     else if(menuState == IN_VGM)
     {
-      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
+      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
         startTrack(NEXT);
       // else if(playMode == SHUFFLE_ALL)
       //   startTrack(RND);
@@ -861,13 +879,14 @@ void loop()
         nav.doNav(navCmd(escCmd));
     else if(menuState == IN_VGM)
     {
-      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
+      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
         startTrack(PREV);
     }
   }
-  if(buttons[2].fell() && menuState == IN_MENU) //Option
+  if(buttons[2].fell()) //Option
   {
-    nav.doNav(navCmd(downCmd));
+    if(menuState == IN_MENU)
+      nav.doNav(navCmd(downCmd));
   }
   if(buttons[3].fell())                         //Select
     {
@@ -879,9 +898,10 @@ void loop()
         menuState = IN_MENU;
       }
     }
-  if(buttons[4].fell() && menuState == IN_MENU)//Rand
+  if(buttons[4].fell())//Rand
   {
-    nav.doNav(navCmd(upCmd));
+    if(menuState == IN_MENU)
+      nav.doNav(navCmd(upCmd));
   }
 
   //UI
@@ -914,13 +934,43 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         if(filePickMenu.selectedFolder != currentDir)
         {
           currentDir = filePickMenu.selectedFolder;
+          if(playMode == SHUFFLE_DIR || playMode == SHUFFLE_ALL)
+            clearRandomHistory();
         }
         getDirIndices(filePickMenu.selectedFolder, filePickMenu.selectedFile);
+        if(playMode == SHUFFLE_DIR || playMode == SHUFFLE_ALL)
+        {
+          randList.add(dirCurIndex);
+          randIndex++;
+        }
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
   return proceed;
 }
 
+result doCreateManifest()
+{
+  CreateManifest(true);
+  return proceed;
+}
+
+result onMenuIdle(menuOut& o,idleEvent e) 
+{
+  if (e==idling && VGMEngine.state == PLAYING) 
+  {
+    switch(e)
+    {
+      case idleStart:
+        {drawOLEDTrackInfo(); Serial.println("Idle Start"); }
+      break;
+      case idling:
+      break;
+      case idleEnd:
+      break;
+    }
+  }
+  return proceed;
+}
 
   //Handy old code
 
