@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "SdFat.h"
-#include "U8g2lib.h" //Run this command in the terminal below if PIO asks for a dependancy: pio lib install "U8g2"
+#include "U8g2lib.h"
 #include "menu.h"
 #include "menuIO/serialIO.h"
 #include "plugin/SdFatMenu.h"
@@ -18,6 +18,7 @@
 #include "SerialUtils.h"
 #include "clocks.h"
 #include "Bounce2.h"
+#include "LinkedList.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -56,6 +57,7 @@ uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
 String getFilePathFromCurrentDirFileIndex();
 uint32_t readFile32(FatFile *f);
 String GetPathFromManifest(uint32_t index);
+void getDirIndices(String dir, String fname);
 uint32_t freeKB();
 void CreateManifest();
 void removeMeta();
@@ -72,13 +74,14 @@ static File file, manifest;
 char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
 uint32_t numberOfDirectories = 0;
-uint32_t currentFileNumber = 0;
 String currentDir = "";
 uint32_t currentDirFileCount = 0;
 uint32_t currentDirFileIndex = 0;
 uint32_t currentDirDirCount = 0; //How many directories are IN the current directory, mainly used for root only.
 
 uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifest file where the current files in the current dir are
+LinkedList<int> randList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
+int randIndex = 0; 
 
 Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
 
@@ -283,7 +286,7 @@ void drawOLEDTrackInfo()
       playmodeStatus = "SHUFFLE ALL";
     else if(playMode == IN_ORDER)
     {
-      String fileNumberData = "Track: " + String((currentDirFileIndex+1)-currentDirDirCount) + "/" + String(currentDirFileCount-currentDirDirCount);
+      String fileNumberData = "Track: " + String(dirCurIndex-dirStartIndex) + "/" + String(dirEndIndex-dirStartIndex); 
       cstr = &fileNumberData[0u];
       u8g2.drawStr(0,50, cstr);
       playmodeStatus = "IN ORDER";
@@ -316,21 +319,32 @@ bool startTrack(FileStrategy fileStrategy, String request)
     case FIRST_START:
     {
       filePath = GetPathFromManifest(0);
-      currentFileNumber = 0;
     }
     break;
     case NEXT:
     {
       if(playMode == IN_ORDER)
       {
-        if(currentDirFileIndex+1 >= currentDirFileCount)
-        {
-          currentDirFileIndex = 0;
-        }
+        if(dirCurIndex != dirEndIndex)
+          dirCurIndex++;
         else
-          currentDirFileIndex++;
-        filePath = getFilePathFromCurrentDirFileIndex();
-        Serial.print("PICK: ");Serial.println(filePath);
+          dirCurIndex = dirStartIndex;
+        filePath = GetPathFromManifest(dirCurIndex);
+      }
+      else if(playMode == SHUFFLE_ALL)
+      {
+        if(randIndex == randList.size()-1) //End of random list, generate new random track and add to list
+        {
+          uint32_t rng = random(numberOfFiles-1);
+          randList.add(rng);
+          randIndex = randList.size()-1;
+          filePath = GetPathFromManifest(rng);
+        }
+        else //Otherwise, move up in history
+        {
+          randIndex++;
+          filePath = GetPathFromManifest(randList.get(randIndex));
+        }
       }
     }
     break;
@@ -338,31 +352,33 @@ bool startTrack(FileStrategy fileStrategy, String request)
     {
       if(playMode == IN_ORDER)
       {
-        if(currentDir == "/") //You need to account for directories inside of root counting as file entries
+        if(dirCurIndex != dirStartIndex)
+          dirCurIndex--;
+        else
+          dirCurIndex = dirEndIndex;
+        filePath = GetPathFromManifest(dirCurIndex);
+      }
+      else if(playMode == SHUFFLE_ALL)
+      {
+        if(randIndex == 0) //Reached end of list
         {
-          if(currentDirFileIndex-currentDirDirCount != 0)
-          {
-            currentDirFileIndex--;
-          }
-          else
-            currentDirFileIndex = currentDirFileCount-1;
+          filePath = GetPathFromManifest(randList.get(randIndex));
         }
-        else //Otherwise, picking a previous file similar, but doesn't worry about directories. This is unsafe. If the user adds a dir inside of a dir, the system won't know what to do.
+        else //Go back in history
         {
-          if(currentDirFileIndex != 0)
-          {
-            currentDirFileIndex--;
-          }
-          else
-            currentDirFileIndex = currentDirFileCount-1;
+          randIndex--;
+          filePath = GetPathFromManifest(randList.get(randIndex));
         }
-        filePath = getFilePathFromCurrentDirFileIndex();
+        
       }
     }
     break;
     case RND:
-    {
+    { //This request will disrupt the correct history and immediatly create a new node at the end of the random history list
+      playMode = SHUFFLE_ALL; 
       uint32_t rng = random(numberOfFiles-1);
+      randList.add(rng);
+      randIndex = randList.size()-1;
       filePath = GetPathFromManifest(rng);
     }
     break;
@@ -436,10 +452,14 @@ void handleSerialIn()
     switch(serialCmd)
     {
       case '+':
-        startTrack(NEXT);
+        if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
+          startTrack(NEXT);
+        // else if(playMode == SHUFFLE_ALL)
+        //   startTrack(RND);
       break;
       case '-':
-        startTrack(PREV);
+        if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
+          startTrack(PREV);
       break;
       case '*':
         startTrack(RND);
@@ -522,8 +542,8 @@ void getDirIndices(String dir, String fname)
     dir.replace("/", "");
   if(dir == "")
     dir = "~/";
-  Serial.print("INCOMING DIR: "); Serial.println(dir);
-  Serial.print("INCOMING FNAME: "); Serial.println(fname);
+  // Serial.print("INCOMING DIR: "); Serial.println(dir);
+  // Serial.print("INCOMING FNAME: "); Serial.println(fname);
   dirStartIndex = 0xFFFFFFFF;
   dirEndIndex = 0; 
   dirCurIndex = 0;
@@ -543,13 +563,13 @@ void getDirIndices(String dir, String fname)
       dirEndIndex = i;
     }
     else if(dirStartIndex != 0xFFFFFFFF)
-    {
       break;
-    }
   }
-  Serial.print("START: "); Serial.println(dirStartIndex);
-  Serial.print("CURRENT: "); Serial.println(dirCurIndex);
-  Serial.print("END: "); Serial.println(dirEndIndex);
+  if(dirStartIndex == 0xFFFFFFFF)
+    dirStartIndex = 0;
+  // Serial.print("START: "); Serial.println(dirStartIndex);
+  // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
+  // Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
 //Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
@@ -579,36 +599,36 @@ uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize)
   return 0xFFFFFFFF; //Int max = error
 }
 
-String getFilePathFromCurrentDirFileIndex()
-{
-  uint32_t index = 0;
-  File nextFile;
-  SD.chdir(currentDir.c_str()); //Make sure the system is on the same dir we are
-  memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
-  while(nextFile.openNext(SD.vwd(), O_READ))
-  {
-    if(index == currentDirFileIndex) //This set of ifs is to account for dirs that might be in the root directory. We need to skip over those, so we'll just push the current index further if we encounter a dir
-    {
-      if(nextFile.isDir())
-      {
-        if(currentDirFileIndex+1 >= currentDirFileCount)
-        {
-          currentDirFileIndex = 0;
-        }
-        else
-          currentDirFileIndex++;
-      }
-      else
-        break; //Found the correct file
-    }
-    index++;
-    nextFile.close(); 
-  }
+// String getFilePathFromCurrentDirFileIndex()
+// {
+//   uint32_t index = 0;
+//   File nextFile;
+//   SD.chdir(currentDir.c_str()); //Make sure the system is on the same dir we are
+//   memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
+//   while(nextFile.openNext(SD.vwd(), O_READ))
+//   {
+//     if(index == currentDirFileIndex) //This set of ifs is to account for dirs that might be in the root directory. We need to skip over those, so we'll just push the current index further if we encounter a dir
+//     {
+//       if(nextFile.isDir())
+//       {
+//         if(currentDirFileIndex+1 >= currentDirFileCount)
+//         {
+//           currentDirFileIndex = 0;
+//         }
+//         else
+//           currentDirFileIndex++;
+//       }
+//       else
+//         break; //Found the correct file
+//     }
+//     index++;
+//     nextFile.close(); 
+//   }
 
-  nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
-  nextFile.close();
-  return currentDir + String(fileName);
-}
+//   nextFile.getName(fileName, MAX_FILE_NAME_SIZE);
+//   nextFile.close();
+//   return currentDir + String(fileName);
+// }
 
 uint32_t readFile32(FatFile *f)
 {
@@ -829,8 +849,10 @@ void loop()
       nav.doNav(navCmd(enterCmd));
     else if(menuState == IN_VGM)
     {
-      if(playMode == IN_ORDER)
+      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
         startTrack(NEXT);
+      // else if(playMode == SHUFFLE_ALL)
+      //   startTrack(RND);
     }
   }
   if(buttons[1].fell()) //Prev
@@ -839,7 +861,7 @@ void loop()
         nav.doNav(navCmd(escCmd));
     else if(menuState == IN_VGM)
     {
-      if(playMode == IN_ORDER)
+      if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
         startTrack(PREV);
     }
   }
@@ -892,22 +914,10 @@ result filePick(eventMask event, navNode& nav, prompt &item)
         if(filePickMenu.selectedFolder != currentDir)
         {
           currentDir = filePickMenu.selectedFolder;
-          Serial.print("ENTRY COUNT: ");
-          currentDirFileCount = countFilesInDir(currentDir);
-          Serial.println(currentDirFileCount);
         }
-        Serial.print("FILE INDEX: ");
-        currentDirFileIndex = getFileIndexInDir(filePickMenu.selectedFolder, filePickMenu.selectedFile, currentDirFileCount);
-        Serial.println(currentDirFileIndex);
-        Serial.print("DIR COUNT: ");
-        Serial.println(currentDirDirCount);
-
         getDirIndices(filePickMenu.selectedFolder, filePickMenu.selectedFile);
-
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
-  //     break;
-  // }
   return proceed;
 }
 
