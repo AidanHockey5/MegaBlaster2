@@ -60,9 +60,10 @@ String GetPathFromManifest(uint32_t index);
 void getDirIndices(String dir, String fname);
 uint32_t freeKB();
 void CreateManifest(bool createNew = false);
-result filePick(eventMask event, navNode& nav, prompt &item);
+result filePick(eventMask event, navNode& _nav, prompt &item);
 result doCreateManifest(); //Required for UI
 result onMenuIdle(menuOut& o, idleEvent e);
+result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item);
 void removeMeta();
 void clearRandomHistory();
 
@@ -103,6 +104,7 @@ bool samplePlaying = false;
 PlayMode playMode = IN_ORDER;
 bool doParse = false;
 
+//UI & Menu
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define fontName u8g2_font_6x12_mr     
 #define fontX 6
@@ -123,7 +125,7 @@ const colorDef<uint8_t> colors[6] MEMMODE={
 using namespace Menu;
 SDMenuT<CachedFSO<SdFat,32>> filePickMenu(SD,"Music","/",filePick,enterEvent);
 
-CHOOSE(playMode,modeMenu,"Mode:",doNothing,noEvent,noStyle
+CHOOSE(playMode,modeMenu,"Mode:",onChoosePlaymode,exitEvent,noStyle
   ,VALUE("Loop",PlayMode::LOOP,doNothing,noEvent)
   ,VALUE("In Order",PlayMode::IN_ORDER,doNothing,noEvent)
   ,VALUE("Shuffle All",PlayMode::SHUFFLE_ALL,doNothing,noEvent)
@@ -148,6 +150,7 @@ serialIn serial(Serial);
 NAVROOT(nav,mainMenu,MAX_DEPTH,serial,out);
 
 MenuState menuState = IN_MENU;
+#define MENU_TIMEOUT_IN_SECONDS 10
 
 bool isOledOn = true;
 
@@ -241,7 +244,7 @@ void setup()
   removeMeta();
   CreateManifest();
 
-  nav.timeOut=5;
+  nav.timeOut=0xFFFFFFFF; //This might be a slight issue if you decide to run your player for 50,000 days straight :/
   nav.idleTask = onMenuIdle;
 }
 
@@ -344,7 +347,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex = dirStartIndex;
         filePath = GetPathFromManifest(dirCurIndex);
       }
-      else if(playMode == SHUFFLE_ALL || SHUFFLE_DIR)
+      else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
         if(randIndex == randList.size()-1 || randList.size() == 0) //End of random list, generate new random track and add to list
         {
@@ -388,7 +391,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       playMode = SHUFFLE_ALL; 
       uint32_t rng = random(numberOfFiles-1);
       randList.add(rng);
-      randIndex = randList.size()-1;
+      randIndex = randList.size() == 0 ? 0 : randList.size()-1;
       filePath = GetPathFromManifest(rng);
       dirCurIndex = rng;
     }
@@ -465,8 +468,6 @@ void handleSerialIn()
       case '+':
         if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
           startTrack(NEXT);
-        // else if(playMode == SHUFFLE_ALL)
-        //   startTrack(RND);
       break;
       case '-':
         if(playMode == IN_ORDER || playMode == SHUFFLE_ALL)
@@ -894,8 +895,10 @@ void loop()
         nav.doNav(navCmd(enterCmd)); 
       else if(menuState == IN_VGM) //Otherwise, you can use the select key to go back to the file picker where you left off
       {
-        nav.refresh();
         menuState = IN_MENU;
+        nav.timeOut=MENU_TIMEOUT_IN_SECONDS;
+        nav.idleOff();
+        nav.refresh();
       }
     }
   if(buttons[4].fell())//Rand
@@ -918,11 +921,11 @@ void loop()
 //UI
 
 //implementing the handler here after filePick is defined...
-result filePick(eventMask event, navNode& nav, prompt &item) 
+result filePick(eventMask event, navNode& _nav, prompt &item) 
 {
   // switch(event) {//for now events are filtered only for enter, so we dont need this checking
   //   case enterCmd:
-      if (nav.root->navFocus==(navTarget*)&filePickMenu) {
+      if (_nav.root->navFocus==(navTarget*)&filePickMenu) {
         // Serial.println();
         // Serial.print("selected file:");
         // Serial.println(filePickMenu.selectedFile);
@@ -956,21 +959,56 @@ result doCreateManifest()
 
 result onMenuIdle(menuOut& o,idleEvent e) 
 {
-  if (e==idling && VGMEngine.state == PLAYING) 
+  if (VGMEngine.state == PLAYING) 
   {
     switch(e)
     {
       case idleStart:
-        {drawOLEDTrackInfo(); Serial.println("Idle Start"); }
+        
       break;
       case idling:
+      {
+        menuState = IN_VGM;
+        drawOLEDTrackInfo();  
+        nav.timeOut=0xFFFFFFFF;
+        nav.refresh();
+      }
       break;
       case idleEnd:
+      nav.timeOut=MENU_TIMEOUT_IN_SECONDS;
       break;
     }
   }
   return proceed;
 }
+
+result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
+{
+  if(e == exitEvent)
+  {
+    switch(playMode)
+    {
+      case PlayMode::LOOP:
+      VGMEngine.maxLoops = 0xFFFF;
+      break;
+      case PlayMode::SHUFFLE_ALL:
+      VGMEngine.maxLoops = 3;
+      menuState = IN_VGM;
+      nav.timeOut=0xFFFFFFFF;
+      startTrack(RND);
+      drawOLEDTrackInfo();
+      break;
+      case PlayMode::IN_ORDER:
+      VGMEngine.maxLoops = 3;
+      break;
+      case PlayMode::SHUFFLE_DIR:
+      VGMEngine.maxLoops = 3;
+      break;
+    }
+  }
+  return proceed;
+}
+
 
   //Handy old code
 
