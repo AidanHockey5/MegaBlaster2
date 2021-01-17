@@ -31,6 +31,7 @@ extern "C" {
 #define DEBUG_LED A4
 bool commandFailed = false;
 uint8_t failedCmd = 0x00;
+#define DISABLE_IRQ_TEST false
 
 //Structs
 enum FileStrategy {FIRST_START, NEXT, PREV, RND, REQUEST};
@@ -223,7 +224,9 @@ void setup()
   u8g2.setBusClock(600000);
   u8g2.setFont(fontName);
 
-  IRQSelfTest();
+  #if !DISABLE_IRQ_TEST
+  IRQSelfTest(); //Test the OPN via it's timers to make sure it's legit
+  #endif
 
   //OLED
   // oled.begin();
