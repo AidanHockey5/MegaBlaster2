@@ -759,7 +759,7 @@ void CreateManifest(bool createNew)
   u8g2.drawStr(0,32,"Please wait...");
   u8g2.sendBuffer();
   FatFile d, f;
-  uint32_t prevBlocks;
+  int32_t prevBlocks;
   String path = "";
   char name[MAX_FILE_NAME_SIZE];
   Serial.println("Checking file manifest...");
@@ -1050,9 +1050,11 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
     {
       case PlayMode::LOOP:
       VGMEngine.maxLoops = 0xFFFF;
+      mainMenu[2].disable();
       break;
       case PlayMode::SHUFFLE_ALL:
       VGMEngine.maxLoops = 3;
+      mainMenu[2].enable();
       menuState = IN_VGM;
       nav.timeOut=0xFFFFFFFF;
       clearRandomHistory();
@@ -1061,12 +1063,18 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
       break;
       case PlayMode::IN_ORDER:
       VGMEngine.maxLoops = 3;
+      mainMenu[2].enable();
       getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::SHUFFLE_DIR:
       VGMEngine.maxLoops = 3;
+      mainMenu[2].enable();
       clearRandomHistory();
       getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
+      break;
+      case PlayMode::PAUSE:
+      break;
+      default:
       break;
     }
   }
