@@ -68,6 +68,8 @@ result onMenuIdle(menuOut& o, idleEvent e);
 result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item);
 void removeMeta();
 void clearRandomHistory();
+void IRQ_ISR();
+void IRQSelfTest();
 
 const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
@@ -96,6 +98,7 @@ Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 
 YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
 SN76489 sn(&bus, 2);
+const uint8_t IRQTestPin = A4;
 
 //VGM Variables
 uint16_t loopCount = 0;
@@ -191,8 +194,8 @@ void setup()
   randomSeed(trngGetRandomNumber());
 
   //DEBUG
-  pinMode(DEBUG_LED, OUTPUT);
-  digitalWrite(DEBUG_LED, LOW);
+  pinMode(DEBUG_LED, INPUT_PULLUP);
+  //digitalWrite(DEBUG_LED, LOW);
 
   resetSleepSpin();
 
@@ -219,6 +222,8 @@ void setup()
   u8g2.begin();
   u8g2.setBusClock(600000);
   u8g2.setFont(fontName);
+
+  IRQSelfTest();
 
   //OLED
   // oled.begin();
@@ -250,6 +255,45 @@ void setup()
 
   nav.timeOut=0xFFFFFFFF; //This might be a slight issue if you decide to run your player for 50,000 days straight :/
   nav.idleTask = onMenuIdle;
+}
+
+uint16_t IRQtestCounter = 0;
+void IRQ_ISR()
+{
+  opn.setYMTimerA(0);
+  IRQtestCounter++;
+}
+
+void IRQSelfTest() //Use the IRQ pin and the built-in OPN timers to determine if a real chip has been installed (correctly)
+{
+  Serial.println("Testing IRQ...");
+  attachInterrupt(digitalPinToInterrupt(IRQTestPin), IRQ_ISR, FALLING);
+  opn.setYMTimerA(0);
+  unsigned long s = millis();
+  while(true)
+  {
+    if(millis()-s > 1000) //Warn user to power device down as their chip may be fake and cause damage to the rest of the system
+    {
+      //fail
+      Serial.println("DANGER!!! YM2612/YM3438 NOT DETECTED! POWER DOWN AND REMOVE IC!");
+      u8g2.clear();
+      u8g2.drawStr(0, 10, "DANGER! UNPLUG UNIT!");
+      u8g2.drawStr(0, 20, "YM2612/YM3438");
+      u8g2.drawStr(0, 30, "NOT DETECTED!");
+      u8g2.drawStr(0, 40, "Your chip may be fake");
+      u8g2.drawStr(0, 51, "or seated incorrectly.");
+      u8g2.drawStr(0, 62, "Halting...");
+      u8g2.sendBuffer();
+      while(true);
+    }
+    if(IRQtestCounter >= 10) //The IRQ pin has pulsed 10 times, it's probably a real chip
+    {
+      break;
+    }
+  };
+  Serial.println("YM IRQ OK!");
+  detachInterrupt(digitalPinToInterrupt(IRQTestPin));
+  opn.clearYMTimerA();
 }
 
 void TC3_Handler() 
@@ -395,6 +439,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
     case RND:
     { //This request will disrupt the random history and immediatly create a new node at the end of the random history list
       playMode = SHUFFLE_ALL; 
+      mainMenu[2].enable(); //Reenable loop # control
       uint32_t rng = random(numberOfFiles-1);
       randList.add(rng);
       randIndex = randList.size() == 0 ? 0 : randList.size()-1;
