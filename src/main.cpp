@@ -9,7 +9,7 @@
 #include "menu.h"
 #include "menuIO/serialIO.h"
 #include "plugin/SdFatMenu.h"
-#include <menuIO/u8g2Out.h>
+#include "menuIO/u8g2Out.h"
 #include "YM2612.h"
 #include "SN76489.h"
 #include "Adafruit_ZeroTimer.h"
@@ -138,6 +138,7 @@ CHOOSE(playMode,modeMenu,"Mode:",onChoosePlaymode,exitEvent,noStyle
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
   ,SUBMENU(modeMenu)
+  ,FIELD(VGMEngine.maxLoops,"Loops","",0,255,1,10,doNothing,noEvent,noStyle)
   ,OP("Rebuild Manifest",doCreateManifest,enterEvent)
   //,EXIT("<Back")
 );
@@ -172,6 +173,7 @@ uint32_t pcmBufferPosition = 0;
 
 void setup()
 {
+  options->invertFieldKeys = true;
   //COM
   Wire.begin();
   Wire.setClock(600000L);
@@ -1070,7 +1072,6 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
   }
   return proceed;
 }
-
 
   //Handy old code
 
