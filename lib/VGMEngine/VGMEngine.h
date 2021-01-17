@@ -15,6 +15,9 @@
 
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define MAX_PCM_BUFFER_SIZE 8388607
+#define COMMAND_ERROR_SKIP_THRESHOLD 20 //If you encounter x bad commands, just skip the track
+
+enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK};
 
 class VGMEngineClass
 {
@@ -35,10 +38,12 @@ public:
     #endif
     bool load(bool singleChunk = false);
     void tick();
-    bool play();
+    VGMEngineState play();
     uint16_t getLoops();
     uint16_t maxLoops = 3;
+    VGMEngineState state = IDLE;
     bool resetISR = false;
+    bool isBusy = false;
     void ramtest();
 
 private:
@@ -47,6 +52,7 @@ private:
     volatile int32_t waitSamples = 0;
     volatile bool ready = false;
     bool bufLock = false;
+    uint16_t badCommandCount = 0;
     uint32_t pcmBufferPosition = 0;
     uint32_t loopPos = 0; //The location of the 0x66 command
     uint16_t loopCount = 0;

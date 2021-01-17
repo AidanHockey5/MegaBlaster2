@@ -29,7 +29,10 @@ bool VGMEngineClass::begin(File *f)
     ready = false;
     file = f;
     if(!header.read(file))
+    {
+        state = END_OF_TRACK;
         return false;
+    }
     gd3.read(file, header.gd3Offset+0x14);
     
 
@@ -56,8 +59,10 @@ bool VGMEngineClass::begin(File *f)
     pcmBufferPosition = 0;
     waitSamples = 0;
     loopCount = 0;
+    badCommandCount = 0;
     MegaStream_Reset(&stream);
     load();
+    state = PLAYING;
     ready = true;
     return true;
 }
@@ -217,16 +222,32 @@ void VGMEngineClass::tick()
     waitSamples--;      
 }
 
-bool VGMEngineClass::play()
+VGMEngineState VGMEngineClass::play()
 {
-    load(); 
-    while(waitSamples <= 0)
+    switch(state)
     {
-        waitSamples += parseVGM();
+    case IDLE:
+        return IDLE;
+    break;
+    case END_OF_TRACK:
+        state = IDLE;
+        return END_OF_TRACK;
+    break;
+    case PLAYING:
+        load(); 
+        while(waitSamples <= 0)
+        {
+            isBusy = true;
+            waitSamples += parseVGM();
+        }
+        isBusy = false;
+        if(loopCount >= maxLoops)
+        {
+            state = END_OF_TRACK;
+        }
+        return PLAYING;
+    break;
     }
-    if(loopCount == maxLoops)
-        return true;
-    return false;
 }
 
 uint16_t VGMEngineClass::getLoops()
@@ -266,6 +287,7 @@ uint16_t VGMEngineClass::parseVGM()
                 //who puttin' 0x67's in MUH stream?
                 //Account for this later, seems to be an edge-case in non-standard VGMs since 0x67's are usually in one big block at the start but can technically be found any time because the VGM spec is retarded.
                 Serial.println("0x67 PCM STORE command encountered mid stream");
+                state = END_OF_TRACK; //Just eject for now
                 break;
             }
             case 0x70:
@@ -315,11 +337,15 @@ uint16_t VGMEngineClass::parseVGM()
             case 0x66:
             {
                 //Loop
-                loopCount++;
+                if(maxLoops != 0xFFFF) //If sent to short int max, just loop forever
+                    loopCount++;
                 return 0;
             }
             default:
                 Serial.print("E:"); Serial.println(cmd, HEX);
+                badCommandCount++;
+                if(badCommandCount >= COMMAND_ERROR_SKIP_THRESHOLD)
+                    state = END_OF_TRACK;
                 return 0;
         }
     }

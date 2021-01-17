@@ -12,6 +12,8 @@ public:
     void write(uint8_t addr, uint8_t data, bool a1);
     void reset();
     void setClock(uint32_t frq);
+    void setYMTimerA(uint16_t value); //10 bit timer. Reg 0x24,0x25. Frq = (0x400 - TMRA) × 18.77µs
+    void clearYMTimerA(); 
     ~YM2612();
 private:
     //ChipClock* clk;

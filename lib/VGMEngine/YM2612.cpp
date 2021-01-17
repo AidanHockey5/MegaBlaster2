@@ -55,6 +55,18 @@ void YM2612::write(uint8_t addr, uint8_t data, bool a1)
         delayMicroseconds(6); //~47 cycles
     else
         delayMicroseconds(2); //~17 cycles
+    // if(addr == 0x24)
+    // {
+    //     Serial.print("0x24: 0x"); Serial.print(data, HEX); Serial.print("   -- A1:"); Serial.println(a1);
+    // }
+    // if(addr == 0x25)
+    // {
+    //     Serial.print("0x25: 0x"); Serial.print(data, HEX); Serial.print("   -- A1:"); Serial.println(a1);
+    // }
+    // if(addr == 0x27)
+    // {
+    //     Serial.print("0x27: 0x"); Serial.print(data, HEX); Serial.print("   -- A1:"); Serial.println(a1);
+    // }
 }
 
 void YM2612::reset()
@@ -68,6 +80,18 @@ void YM2612::reset()
 void YM2612::setClock(uint32_t frq)
 {
     clkfrq = frq;
+}
+
+void YM2612::setYMTimerA(uint16_t value)
+{
+    write(0x25, value & 0x03, 0);
+    write(0x24, value>>2, 0);
+    write(0x27, 0b00010101, 0);
+}
+
+void YM2612::clearYMTimerA()
+{
+    write(0x27, 0, 0);
 }
 
 YM2612::~YM2612(){}
