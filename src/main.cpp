@@ -57,7 +57,9 @@ uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
 String getFilePathFromCurrentDirFileIndex();
 uint32_t readFile32(FatFile *f);
 String GetPathFromManifest(uint32_t index);
+String readStringUntil(String & in, char terminator);
 void getDirIndices(String dir, String fname);
+void getDirIndicesFromFullPath(String fullPath);
 uint32_t freeKB();
 void CreateManifest(bool createNew = false);
 result filePick(eventMask event, navNode& _nav, prompt &item);
@@ -355,11 +357,13 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randList.add(rng);
           randIndex = randList.size()-1;
           filePath = GetPathFromManifest(rng);
+          Serial.println("This");
         }
         else //Otherwise, move up in history
         {
           randIndex++;
           filePath = GetPathFromManifest(randList.get(randIndex));
+          Serial.println("That");
         }
         dirCurIndex = randIndex;
       }
@@ -590,6 +594,54 @@ void getDirIndices(String dir, String fname)
   // Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
+bool contains(String & in, char find)
+{
+  unsigned int l = in.length()-1;
+  for(unsigned int i = 0; i<l; i++)
+  {
+    if(in[i] == find) 
+      return true;
+  }
+  return false;
+}
+
+String readStringUntil(String & in, char terminator)
+{
+  uint32_t i = 0;
+  String out = "";
+  while(in[i] != '\n' && in[i] != terminator)
+  {
+    out += in[i++];
+  }
+  return out;
+}
+
+void getDirIndicesFromFullPath(String fullPath)
+{
+  Serial.println(fullPath);
+  String path, fname = "";
+  fullPath.replace(String(dirCurIndex)+":", "");
+  if(fullPath.startsWith("~/"))
+  {
+    path = "~/";
+    fullPath.replace(path, "");
+  }
+  else if(!contains(fullPath, '/')) //File is on root but doesn't contain the ~/ marker
+  {
+    path = "~/";
+  }
+  else
+  {
+    path = readStringUntil(fullPath, '/');
+    fullPath.replace(path, "");
+    path+='/';
+  }
+  fname = fullPath;
+  fname.remove(0, 1);
+  fname.trim();
+  getDirIndices(path, fname);
+}
+
 //Get the file's index inside of a dir. If you pass 0, this function will count the files in the dir, otherwise, you can specify a dir size in advance if you've already ran "countFilesInDir()" to save time
 uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize)
 {
@@ -679,6 +731,7 @@ String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the
   selection.replace(String(index) + ":", "");
   selection.replace("~/", ""); //for root dirs
   SD.chdir("/");
+  manifest.close();
   return selection;
 }
 
@@ -737,6 +790,8 @@ void CreateManifest(bool createNew)
 
   if(createNewManifest)
   {
+    if(!SD.exists(MANIFEST_DIR))
+      SD.mkdir(MANIFEST_DIR);
     if(!manifest.remove())
     {
       if(SD.exists(MANIFEST_PATH))
@@ -943,8 +998,11 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
         getDirIndices(filePickMenu.selectedFolder, filePickMenu.selectedFile);
         if(playMode == SHUFFLE_DIR || playMode == SHUFFLE_ALL)
         {
+          if(randList.size() == 0)
+            randIndex = 0;
+          else
+            randIndex++;
           randList.add(dirCurIndex);
-          randIndex++;
         }
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
@@ -995,14 +1053,18 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
       VGMEngine.maxLoops = 3;
       menuState = IN_VGM;
       nav.timeOut=0xFFFFFFFF;
+      clearRandomHistory();
       startTrack(RND);
       drawOLEDTrackInfo();
       break;
       case PlayMode::IN_ORDER:
       VGMEngine.maxLoops = 3;
+      getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::SHUFFLE_DIR:
       VGMEngine.maxLoops = 3;
+      clearRandomHistory();
+      getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
     }
   }
