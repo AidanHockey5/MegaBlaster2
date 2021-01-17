@@ -275,6 +275,7 @@ void IRQSelfTest() //Use the IRQ pin and the built-in OPN timers to determine if
     if(millis()-s > 1000) //Warn user to power device down as their chip may be fake and cause damage to the rest of the system
     {
       //fail
+      //https://ww1.microchip.com/downloads/en/DeviceDoc/SAM_D5x_E5x_Family_Data_Sheet_DS60001507G.pdf page 805, perhaps tri-state all of the pins?
       Serial.println("DANGER!!! YM2612/YM3438 NOT DETECTED! POWER DOWN AND REMOVE IC!");
       u8g2.clear();
       u8g2.drawStr(0, 10, "DANGER! UNPLUG UNIT!");
