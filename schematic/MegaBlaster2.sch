@@ -1234,7 +1234,6 @@ D7
 Text GLabel 8850 2600 0    50   Input ~ 0
 YM_IC
 NoConn ~ 8850 2500
-NoConn ~ 9950 2700
 Text GLabel 9950 2600 2    50   Input ~ 0
 YM_CS
 Text GLabel 9950 2500 2    50   Input ~ 0
@@ -3154,4 +3153,35 @@ Wire Wire Line
 	13500 7450 14050 7450
 Wire Wire Line
 	13650 7750 14350 7750
+Text GLabel 4250 3750 2    50   Input ~ 0
+YM_IRQ
+Text GLabel 9950 2700 2    50   Input ~ 0
+YM_IRQ
+$Comp
+L Device:R_Small R23
+U 1 1 6006614F
+P 4050 3650
+F 0 "R23" H 4109 3696 50  0000 L CNN
+F 1 "10K" H 4109 3605 50  0000 L CNN
+F 2 "Resistor_SMD:R_0805_2012Metric" H 4050 3650 50  0001 C CNN
+F 3 "~" H 4050 3650 50  0001 C CNN
+	1    4050 3650
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3450 3750 4050 3750
+Wire Wire Line
+	4050 3750 4250 3750
+Connection ~ 4050 3750
+$Comp
+L power:+3V3 #PWR07
+U 1 1 6008EE50
+P 4050 3550
+F 0 "#PWR07" H 4050 3400 50  0001 C CNN
+F 1 "+3V3" H 4065 3723 50  0000 C CNN
+F 2 "" H 4050 3550 50  0001 C CNN
+F 3 "" H 4050 3550 50  0001 C CNN
+	1    4050 3550
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC

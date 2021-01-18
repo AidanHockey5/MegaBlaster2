@@ -1,4 +1,18 @@
-19105174849997470
+19114843068443745
+Art
+FM_1
+
+
+0
+0
+0
+Art
+FM_2
+
+
+0
+0
+0
 Art
 logo1
 
@@ -15,6 +29,27 @@ logo_2
 0
 Art
 logo_3
+
+
+0
+0
+0
+Art
+square_1
+
+
+0
+0
+0
+Art
+square_half
+
+
+0
+0
+0
+Art
+triangle
 
 
 0
@@ -83355,6 +83390,13 @@ L_4x4
 0
 2
 2
+custom_inductors
+oled_128x64
+
+
+0
+4
+4
 custom_oled
 oled_128x64
 

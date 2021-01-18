@@ -1231,17 +1231,6 @@ Text GLabel 8950 3900 0    50   Input ~ 0
 D6
 Text GLabel 8950 4000 0    50   Input ~ 0
 D7
-$Comp
-L LED:NeoPixel_THT D2
-U 1 1 5FE99965
-P 6500 4650
-F 0 "D2" H 6844 4696 50  0000 L CNN
-F 1 "NeoPixel_THT" H 6844 4605 50  0000 L CNN
-F 2 "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm" H 6550 4350 50  0001 L TNN
-F 3 "https://www.adafruit.com/product/1938" H 6600 4275 50  0001 L TNN
-	1    6500 4650
-	1    0    0    -1  
-$EndComp
 Text GLabel 8850 2600 0    50   Input ~ 0
 YM_IC
 NoConn ~ 8850 2500
@@ -1425,31 +1414,6 @@ Text GLabel 3450 3450 2    50   Input ~ 0
 YM_CS
 Text GLabel 3450 3350 2    50   Input ~ 0
 YM_WR
-Text GLabel 6200 4650 0    50   Input ~ 0
-NEOPIX
-$Comp
-L power:+3V3 #PWR036
-U 1 1 5FECD750
-P 6500 4350
-F 0 "#PWR036" H 6500 4200 50  0001 C CNN
-F 1 "+3V3" H 6515 4523 50  0000 C CNN
-F 2 "" H 6500 4350 50  0001 C CNN
-F 3 "" H 6500 4350 50  0001 C CNN
-	1    6500 4350
-	1    0    0    -1  
-$EndComp
-$Comp
-L power:GND #PWR037
-U 1 1 5FECE043
-P 6500 4950
-F 0 "#PWR037" H 6500 4700 50  0001 C CNN
-F 1 "GND" H 6505 4777 50  0000 C CNN
-F 2 "" H 6500 4950 50  0001 C CNN
-F 3 "" H 6500 4950 50  0001 C CNN
-	1    6500 4950
-	1    0    0    -1  
-$EndComp
-NoConn ~ 6800 4650
 Text Notes 14300 10250 0    50   ~ 0
 Kunoichi Analog Stage
 $Comp

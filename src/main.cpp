@@ -177,7 +177,6 @@ uint32_t pcmBufferPosition = 0;
 
 void setup()
 {
-  options->invertFieldKeys = true;
   //COM
   Wire.begin();
   Wire.setClock(600000L);
@@ -249,6 +248,7 @@ void setup()
   }
   filePickMenu.begin();
   nav.useAccel=true;
+  options->invertFieldKeys = true;
 
   Serial.flush();
 
