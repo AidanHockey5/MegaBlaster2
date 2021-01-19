@@ -831,7 +831,6 @@ void CreateManifest(bool createNew)
       Serial.println("MANIFEST MAGIC OK");
       manifest.seekEnd(-8);
       numberOfFiles = readFile32(&manifest);
-      Serial.println(numberOfFiles);
       manifest.seekEnd(-4); //Read-in old manifest size
       prevBlocks = readFile32(&manifest);
       if(prevBlocks != SD.vol()->freeClusterCount())
@@ -911,7 +910,6 @@ void CreateManifest(bool createNew)
   }
   else
     Serial.println("No change in files, continuing...");
-
   manifest.close();
   Serial.println("Indexing complete");
   u8g2.clearDisplay();
