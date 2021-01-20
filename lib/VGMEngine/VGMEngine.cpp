@@ -55,6 +55,9 @@ bool VGMEngineClass::begin(File *f)
     #if ENABLE_SPIRAM
         ram.Init();
     #endif
+    resetDataBlocks();
+    dacSampleReadyCounter = 0;
+    activeDacStreamBlock = 0;
     storePCM();
     pcmBufferPosition = 0;
     waitSamples = 0;
@@ -65,6 +68,11 @@ bool VGMEngineClass::begin(File *f)
     state = PLAYING;
     ready = true;
     return true;
+}
+
+void VGMEngineClass::resetDataBlocks()
+{
+    memset(dataBlocks, 0, sizeof(dataBlocks));
 }
 
 uint8_t empty = 0;
@@ -123,29 +131,40 @@ bool VGMEngineClass::topUp()
 bool VGMEngineClass::storePCM(bool skip)
 {
     bool isPCM = false;
-    if(file->peek() == 0x67) //PCM Block
+    uint8_t openSlot = 0;
+    while(file->peek() == 0x67) //PCM Block
     {
+        for(uint8_t i = 0; i<MAX_DATA_BLOCKS_IN_BANK; i++)
+        {
+            if(!dataBlocks[i].slotOccupied)
+            {
+                dataBlocks[i].slotOccupied = true;
+                openSlot = i;
+                break;
+            }
+        }
         isPCM = true;
-        //Serial.println("pcm");
         file->read(); //0x67
         file->read(); //0x66
         file->read(); //datatype
-        uint32_t pcmSize = 0;
-        file->read(&pcmSize, 4); //PCM chunk size
+        file->read(&dataBlocks[openSlot].DataLength, 4); //PCM chunk size
         if(skip)            //On loop, you'll want to just skip the PCM block since it's already loaded.
         {
-            file->seekCur(pcmSize);
+            file->seekCur(dataBlocks[openSlot].DataLength);
             return false;
         }
-        if(pcmSize > MAX_PCM_BUFFER_SIZE)
+        if(dataBlocks[openSlot].DataLength > MAX_PCM_BUFFER_SIZE)
         {
             return true; //todo: Error out here or go to next track. return is temporary
         }
         else
         {
-            for(uint32_t i = 0; i<pcmSize; i++)
+            uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
+            for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
             {
                 ram.WriteByte(i, file->read());
+                pcmBufferEndPosition++;
+                dataBlocks[openSlot].DataStart = lastBlockEndPos;
             }
         }
     } 
@@ -214,12 +233,18 @@ void VGMEngineClass::chipSetup()
     #endif
 }
 
-
-void VGMEngineClass::tick()
+void VGMEngineClass::tick44k1()
 {
     if(!ready)
         return;
     waitSamples--;      
+}
+
+void VGMEngineClass::tickDacStream()
+{
+    if(!ready)
+        return;
+    dacSampleReadyCounter--;
 }
 
 VGMEngineState VGMEngineClass::play()
@@ -235,11 +260,22 @@ VGMEngineState VGMEngineClass::play()
     break;
     case PLAYING:
         load(); 
+        while(dacSampleReadyCounter <= 0 && activeDacStreamBlock != 0xFF)
+        {
+            dacSampleReadyCounter++;
+            if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
+                ym2612->write(0x2A, ram.ReadByte(dacStreamBufPos++), 0);
+            else
+            {
+                activeDacStreamBlock = 0xFF;
+            }
+        }
         while(waitSamples <= 0)
         {
             isBusy = true;
             waitSamples += parseVGM();
         }
+
         isBusy = false;
         if(loopCount >= maxLoops)
         {
@@ -284,12 +320,27 @@ uint16_t VGMEngineClass::parseVGM()
                 return 882;
             case 0x67:
             {
-                //who puttin' 0x67's in MUH stream?
-                //Account for this later, seems to be an edge-case in non-standard VGMs since 0x67's are usually in one big block at the start but can technically be found any time because the VGM spec is retarded.
-                Serial.println("0x67 PCM STORE command encountered mid stream");
-                state = END_OF_TRACK; //Just eject for now
+                readBufOne(); //0x67
+                readBufOne(); //0x66
+                readBufOne(); //datatype
+                uint32_t pcmSize = readBuf32();
+                Serial.println("CALLED PCM STORE MID STREAM");
+                if(pcmSize > MAX_PCM_BUFFER_SIZE)
+                {
+                    Serial.print("TOO BIG!");
+                    return true; //todo: Error out here or go to next track. return is temporary
+                }
+                else
+                {
+                    for(uint32_t i = pcmBufferEndPosition; i<pcmSize+pcmBufferEndPosition; i++)
+                    {
+                        ram.WriteByte(i, readBufOne());
+                        pcmBufferEndPosition++;
+                    }
+                }
                 break;
             }
+            break;
             case 0x70:
             case 0x71:
             case 0x72:
@@ -339,8 +390,64 @@ uint16_t VGMEngineClass::parseVGM()
                 //Loop
                 if(maxLoops != 0xFFFF) //If sent to short int max, just loop forever
                     loopCount++;
+                activeDacStreamBlock = 0xFF;
                 return 0;
             }
+            case 0x90:
+            {
+                readBuf16();//skip stream ID and chip type
+                dataBlockChipPort = readBufOne();
+                dataBlockChipCommand = readBufOne();
+                //Serial.print("0x90: ");// Serial.print(streamID, HEX); Serial.print(" "); Serial.print(chiptype, HEX); Serial.print(" "); Serial.print(pp, HEX); Serial.print(" "); Serial.print(cc, HEX); Serial.println("   --- SETUP STREAM CONTROL");
+            }
+            break;
+            case 0x91:
+            {
+                readBuf16(); //Skip stream ID and Data bank ID. Stream ID will be const and so will data bank if you're just using OPN2/PSG
+                dataBlockStepSize = readBufOne();
+                dataBlockStepBase = readBufOne();
+                //Serial.println("0x91: "); //Serial.print(streamID, HEX); Serial.print(" "); Serial.print(dbID, HEX); Serial.print(" "); Serial.print(ll, HEX); Serial.print(" "); Serial.print(bb, HEX); Serial.println("   --- SET STREAM DATA");
+            }
+            break;
+            case 0x92:
+            {
+                readBufOne(); //skip stream ID
+                uint32_t streamFrq = readBuf32();
+                setDacStreamTimer(streamFrq);
+                //Serial.println("0x92: "); //Serial.print(streamID, HEX); Serial.print(" "); Serial.print(streamFrq); Serial.println("   --- SET STREAM FRQ");
+            }
+            break;
+            case 0x93:
+            {
+                //Come back to this one
+                readBufOne(); //skip stream ID
+                dacStreamBufPos = readBuf32();
+                uint8_t lengthMode = readBufOne();
+                dacStreamCurLength = readBuf32();
+                //Serial.println("0x93: "); //Serial.print(streamID, HEX); Serial.print(" "); Serial.print(dStart, HEX); Serial.print(" "); Serial.print(lengthMode, HEX); Serial.print(" "); Serial.print(dLength); Serial.println("   --- START STREAM");
+            }
+            break;
+            case 0x94:
+            {
+                readBufOne(); //skip stream ID
+                stopDacStreamTimer();
+                activeDacStreamBlock = 0xFF;
+                //Serial.println("0x94: "); //Serial.print(streamID, HEX); Serial.print(" "); Serial.println("   --- STOP STREAM");
+            }
+            break;
+            case 0x95:
+            {
+                readBufOne(); //skip stream ID
+                uint16_t blockID = readBuf16();
+                uint8_t flags = readBufOne();
+                dacStreamBufPos = dataBlocks[blockID].DataStart;
+                dacStreamCurLength = dataBlocks[blockID].DataLength;
+                activeDacStreamBlock = blockID;
+               //Serial.print("0x95: "); // Serial.print(streamID, HEX); Serial.print(" "); Serial.print(blockID, HEX); Serial.print(" "); Serial.print(flags, HEX); Serial.println("   --- START STREAM FAST");
+                //Serial.print("BLOCK ID: "); Serial.println(blockID);
+            }
+            break;
+
             default:
                 Serial.print("E:"); Serial.println(cmd, HEX);
                 badCommandCount++;

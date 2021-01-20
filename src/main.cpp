@@ -13,6 +13,8 @@
 #include "YM2612.h"
 #include "SN76489.h"
 #include "Adafruit_ZeroTimer.h"
+//#include "SAMDTimerInterrupt.h"
+//#include "SAMD_ISR_Timer.h"
 #include "logo.h"
 #include "SpinSleep.h"
 #include "SerialUtils.h"
@@ -42,9 +44,9 @@ enum MenuState {IN_MENU, IN_VGM};
 void setup();
 void loop();
 void handleSerialIn();
-void tick();
-void setISR();
-void pauseISR();
+void tick44k1();
+void set44k1ISR();
+void stop44k1();
 void handleButtons();
 void prepareChips();
 void readGD3();
@@ -93,7 +95,10 @@ uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifes
 LinkedList<int> randList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 int randIndex = 0; 
 
-Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
+Adafruit_ZeroTimer timer1 = Adafruit_ZeroTimer(3);
+Adafruit_ZeroTimer timer2 = Adafruit_ZeroTimer(4);
+//SAMDTimer ITimer(TIMER_TC3);
+//SAMDTimer dacStreamTimer(MAX_TIMER);
 
 Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 
@@ -175,6 +180,69 @@ uint32_t cmdPos = 0;
 uint16_t waitSamples = 0;
 uint32_t pcmBufferPosition = 0;
 
+void TC3_Handler() 
+{
+  Adafruit_ZeroTimer::timerHandler(3);
+}
+
+void TC4_Handler() 
+{
+  Adafruit_ZeroTimer::timerHandler(4);
+}
+
+void tick44k1(void) //44.1KHz tick
+{
+  VGMEngine.tick44k1();
+}
+
+void stop44k1()
+{
+  timer1.enable(false);
+}
+
+void set44k1ISR()
+{
+  //44.1KHz target, actual 44,117Hz
+  const uint16_t compare = 1088;
+  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+  timer1.enable(false);
+  timer1.configure(prescaler,       // prescaler
+        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+        );
+  timer1.setCompare(0, compare);
+  timer1.setCallback(true, TC_CALLBACK_CC_CHANNEL0, tick44k1);
+  timer1.enable(true);
+}
+
+void tickDacStream()
+{
+  VGMEngine.tickDacStream();
+}
+
+void stopDacStreamTimer()
+{
+  timer2.enable(false);
+}
+
+void setDacStreamTimer(uint32_t frequency)
+{
+  double prescale = 1;
+  double period = (1000000.0f / frequency);
+  double compare = (48000000L / (prescale/(period/1000000L)))-1;
+
+  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+  timer2.enable(false);
+  timer2.configure(prescaler,       // prescaler
+        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+        );
+  timer2.setCompare(0, compare);
+  timer2.setCallback(true, TC_CALLBACK_CC_CHANNEL0, tickDacStream);
+  timer2.enable(true);
+  //Serial.println(frequency);
+}
+
 void setup()
 {
   //COM
@@ -188,6 +256,10 @@ void setup()
   si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_4MA);
   si5351.set_freq(NTSC_YMCLK*100ULL, SI5351_CLK0); //CLK0 YM
   si5351.set_freq(NTSC_COLORBURST*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
+
+  //Timers
+  VGMEngine.setDacStreamTimer = &setDacStreamTimer;
+  VGMEngine.stopDacStreamTimer = &stopDacStreamTimer;
 
   //RNG
   trngInit();
@@ -300,36 +372,6 @@ void IRQSelfTest() //Use the IRQ pin and the built-in OPN timers to determine if
   opn.clearYMTimerA();
 }
 
-void TC3_Handler() 
-{
-  Adafruit_ZeroTimer::timerHandler(3);
-}
-
-void TimerCallback0(void) //44.1KHz tick
-{
-  VGMEngine.tick();
-}
-
-void pauseISR()
-{
-  zerotimer.enable(false);
-}
-
-void setISR()
-{
-  //44.1KHz target, actual 44,117Hz
-  const uint16_t compare = 1088;
-  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
-  zerotimer.enable(false);
-  zerotimer.configure(prescaler,       // prescaler
-        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
-        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
-        );
-  zerotimer.setCompare(0, compare);
-  zerotimer.setCallback(true, TC_CALLBACK_CC_CHANNEL0, TimerCallback0);
-  zerotimer.enable(true);
-}
-
 void drawOLEDTrackInfo()
 {
   if(isOledOn)
@@ -377,7 +419,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
 {
   String filePath = "";
 
-  pauseISR();
+  stop44k1();
   ready = false;
   File nextFile;
   memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
@@ -490,7 +532,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       printlnw(VGMEngine.gd3.releaseDate);
       if(menuState == IN_VGM)
         drawOLEDTrackInfo();
-      setISR();
+      set44k1ISR();
       return true;
     }
     else
@@ -501,14 +543,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
 
   fail:
-  setISR();
+  set44k1ISR();
   return false;
-}
-
-//Count at 44.1KHz
-void tick()
-{
-  VGMEngine.tick();
 }
 
 //Poll the serial port
@@ -516,7 +552,7 @@ void handleSerialIn()
 {
   while(Serial.available())
   {
-    pauseISR();
+    stop44k1();
     char serialCmd = Serial.read();
     switch(serialCmd)
     {
@@ -566,7 +602,7 @@ void handleSerialIn()
     }
   }
   Serial.flush();
-  setISR();
+  set44k1ISR();
 }
 
 void clearRandomHistory()
