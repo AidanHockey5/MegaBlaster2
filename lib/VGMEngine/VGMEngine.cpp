@@ -56,7 +56,7 @@ bool VGMEngineClass::begin(File *f)
         ram.Init();
     #endif
     resetDataBlocks();
-    dacSampleReadyCounter = 0;
+    dacSampleReady = false;
     activeDacStreamBlock = 0;
     storePCM();
     pcmBufferPosition = 0;
@@ -168,6 +168,7 @@ bool VGMEngineClass::storePCM(bool skip)
             }
         }
     } 
+    Serial.print("Used Bytes: "); Serial.println(ram.usedBytes);
     return isPCM;
 }
 
@@ -244,7 +245,8 @@ void VGMEngineClass::tickDacStream()
 {
     if(!ready)
         return;
-    dacSampleReadyCounter--;
+    if(activeDacStreamBlock != 0xFF)
+        dacSampleReady = true;
 }
 
 VGMEngineState VGMEngineClass::play()
@@ -260,15 +262,13 @@ VGMEngineState VGMEngineClass::play()
     break;
     case PLAYING:
         load(); 
-        while(dacSampleReadyCounter <= 0 && activeDacStreamBlock != 0xFF)
+        if(dacSampleReady)
         {
-            dacSampleReadyCounter++;
+            dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
                 ym2612->write(0x2A, ram.ReadByte(dacStreamBufPos++), 0);
             else
-            {
                 activeDacStreamBlock = 0xFF;
-            }
         }
         while(waitSamples <= 0)
         {

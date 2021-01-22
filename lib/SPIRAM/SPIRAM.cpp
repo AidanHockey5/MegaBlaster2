@@ -40,6 +40,7 @@ void SPIRAM::Init()
     SPI.transfer(0x00);
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
     SPI.endTransaction();
+    usedBytes = 0;
 }
 
 unsigned char SPIRAM::ReadByte(uint32_t addr)
@@ -67,6 +68,7 @@ void SPIRAM::WriteByte(uint32_t addr, unsigned char data)
     SPI.transfer(data);
     SPI.endTransaction();
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
+    usedBytes++;
 }
 
 

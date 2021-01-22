@@ -86,7 +86,7 @@ private:
     uint8_t dataBlockStepBase;
     uint32_t dacStreamBufPos;
     uint32_t dacStreamCurLength;
-    int32_t dacSampleReadyCounter;
+    int32_t dacSampleReady = false;
     uint8_t activeDacStreamBlock;
 
     uint8_t readBufOne(); 
