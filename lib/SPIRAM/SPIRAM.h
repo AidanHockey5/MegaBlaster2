@@ -1,6 +1,12 @@
+
 #ifndef SPIRAM_H_
 #define SPIRAM_H_
 #include <Arduino.h>
+
+//LY68L6400SLIT
+
+#define PAGE_SIZE 1023
+
 class SPIRAM
 {
 public:

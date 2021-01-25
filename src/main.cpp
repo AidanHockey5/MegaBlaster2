@@ -227,9 +227,9 @@ void stopDacStreamTimer()
 
 void setDacStreamTimer(uint32_t frequency)
 {
-  double prescale = 1;
-  double period = (1000000.0f / frequency);
-  double compare = (48000000L / (prescale/(period/1000000L)))-1;
+  float prescale = 1;
+  float period = (1000000.0f / frequency);
+  float compare = (48000000L / (prescale/(period/1000000L)))-1;
 
   tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
   timer2.enable(false);
@@ -382,10 +382,18 @@ void drawOLEDTrackInfo()
     u8g2.clearDisplay();
     u8g2.setFont(u8g2_font_helvR08_tr);
     u8g2.sendBuffer();
-    u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
-    u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
-    u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
-    u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+    if(wstrlen(VGMEngine.gd3.enTrackName) != 1) //No track name was seen in the GD3
+    {
+      u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
+      u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
+      u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
+      u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+    }
+    else
+    {
+      u8g2.drawStr(0,10, "No GD3 Data");
+    }
+
     char* cstr;
     String playmodeStatus;
     if(playMode == LOOP)
@@ -423,7 +431,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
   ready = false;
   File nextFile;
   memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
-
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(65, 64, " LOADING...");
+  u8g2.setDrawColor(1);
+  u8g2.sendBuffer();
   switch(fileStrategy)
   {
     case FIRST_START:
@@ -515,6 +526,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
   Serial.println(filePath);
   if(SD.exists(filePath.c_str()))
     file.close();
+  opn.reset();
+  sn.reset();
   file = SD.open(filePath.c_str(), FILE_READ);
   if(!file)
   {

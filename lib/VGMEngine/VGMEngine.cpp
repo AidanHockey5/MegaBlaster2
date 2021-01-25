@@ -63,6 +63,7 @@ bool VGMEngineClass::begin(File *f)
     waitSamples = 0;
     loopCount = 0;
     badCommandCount = 0;
+    dacSampleCountDown = 0;
     MegaStream_Reset(&stream);
     load();
     state = PLAYING;
@@ -148,13 +149,15 @@ bool VGMEngineClass::storePCM(bool skip)
         file->read(); //0x66
         file->read(); //datatype
         file->read(&dataBlocks[openSlot].DataLength, 4); //PCM chunk size
+        ram.usedBytes+=dataBlocks[openSlot].DataLength;
         if(skip)            //On loop, you'll want to just skip the PCM block since it's already loaded.
         {
             file->seekCur(dataBlocks[openSlot].DataLength);
             return false;
         }
-        if(dataBlocks[openSlot].DataLength > MAX_PCM_BUFFER_SIZE)
+        if(ram.usedBytes >= MAX_PCM_BUFFER_SIZE)
         {
+            state = END_OF_TRACK;
             return true; //todo: Error out here or go to next track. return is temporary
         }
         else
@@ -164,8 +167,8 @@ bool VGMEngineClass::storePCM(bool skip)
             {
                 ram.WriteByte(i, file->read());
                 pcmBufferEndPosition++;
-                dataBlocks[openSlot].DataStart = lastBlockEndPos;
             }
+            dataBlocks[openSlot].DataStart = lastBlockEndPos;
         }
     } 
     Serial.print("Used Bytes: "); Serial.println(ram.usedBytes);
@@ -246,7 +249,7 @@ void VGMEngineClass::tickDacStream()
     if(!ready)
         return;
     if(activeDacStreamBlock != 0xFF)
-        dacSampleReady = true;
+        dacSampleCountDown--;
 }
 
 VGMEngineState VGMEngineClass::play()
@@ -262,13 +265,14 @@ VGMEngineState VGMEngineClass::play()
     break;
     case PLAYING:
         load(); 
-        if(dacSampleReady)
+        while(dacSampleCountDown <= 0)
         {
             dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
                 ym2612->write(0x2A, ram.ReadByte(dacStreamBufPos++), 0);
             else
                 activeDacStreamBlock = 0xFF;
+            dacSampleCountDown++;
         }
         while(waitSamples <= 0)
         {

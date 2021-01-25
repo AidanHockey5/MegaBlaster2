@@ -88,6 +88,7 @@ private:
     uint32_t dacStreamCurLength;
     int32_t dacSampleReady = false;
     uint8_t activeDacStreamBlock;
+    int32_t dacSampleCountDown;
 
     uint8_t readBufOne(); 
     uint16_t readBuf16();
