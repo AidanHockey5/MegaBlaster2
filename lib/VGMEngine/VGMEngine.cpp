@@ -133,6 +133,9 @@ bool VGMEngineClass::storePCM(bool skip)
 {
     bool isPCM = false;
     uint8_t openSlot = 0;
+    uint16_t curPage = 0;
+    uint32_t count = 0;
+    pcmBufferEndPosition = 0;
     while(file->peek() == 0x67) //PCM Block
     {
         for(uint8_t i = 0; i<MAX_DATA_BLOCKS_IN_BANK; i++)
@@ -149,7 +152,8 @@ bool VGMEngineClass::storePCM(bool skip)
         file->read(); //0x66
         file->read(); //datatype
         file->read(&dataBlocks[openSlot].DataLength, 4); //PCM chunk size
-        ram.usedBytes+=dataBlocks[openSlot].DataLength;
+        //ram.usedBytes+=dataBlocks[openSlot].DataLength;
+        pcmBufferEndPosition+=dataBlocks[openSlot].DataLength;
         if(skip)            //On loop, you'll want to just skip the PCM block since it's already loaded.
         {
             file->seekCur(dataBlocks[openSlot].DataLength);
@@ -162,16 +166,38 @@ bool VGMEngineClass::storePCM(bool skip)
         }
         else
         {
-            uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
-            for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
+            //Note: Writing in pages will likely result in wasted ram if the ending page only takes up a fraction of the total page size
+            uint32_t lastBlockEndPos = openSlot == 0 ? 0 : curPage*PAGE_SIZE;
+            uint8_t page[PAGE_SIZE];
+            uint16_t pagesRequired = ceil((double)dataBlocks[openSlot].DataLength / (double)PAGE_SIZE);
+            for(uint16_t i = 0; i<pagesRequired; i++)
             {
-                ram.WriteByte(i, file->read());
-                pcmBufferEndPosition++;
+                file->readBytes(page, PAGE_SIZE);
+                ram.WritePage(curPage*PAGE_SIZE, page);
+                curPage++;
             }
+            count++;
+            if(header.vgmDataOffset == 0)
+                file->seek(0x40+pcmBufferEndPosition+(7*count)); //7 is for the PCM block header info and datasize and needs to be multiplied by the datablock # (count)
+            else
+                file->seek(header.vgmDataOffset+0x34+pcmBufferEndPosition+(7*count));
+
+
             dataBlocks[openSlot].DataStart = lastBlockEndPos;
+
+
+            //byte-by-byte
+            // uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
+            // for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
+            // {
+            //     ram.WriteByte(i, file->read());
+            //     pcmBufferEndPosition++;
+            // }
+            // dataBlocks[openSlot].DataStart = lastBlockEndPos;
         }
     } 
-    Serial.print("Used Bytes: "); Serial.println(ram.usedBytes);
+    
+    //Serial.print("Used Bytes: "); Serial.println(ram.usedBytes);
     return isPCM;
 }
 
