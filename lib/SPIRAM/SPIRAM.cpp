@@ -39,21 +39,22 @@ void SPIRAM::Init()
     SPI.transfer(0x01);
     SPI.transfer(0x00);
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
-    SPI.endTransaction();
+    //SPI.endTransaction();
     usedBytes = 0;
 }
 
 unsigned char SPIRAM::ReadByte(uint32_t addr)
 {
+    SetMode(BYTE_MODE);
     unsigned char data;
     REG_PORT_OUTCLR0 = PORT_PA07; //CS LOW
-    SPI.transfer(0x03);
+    SPI.transfer(READ);
     SPI.transfer((uint8_t)(addr >> 16));
     SPI.transfer((uint8_t)(addr >> 8));
     SPI.transfer((uint8_t)addr);
     data = SPI.transfer(0x00);
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
-    SPI.endTransaction();
+    //SPI.endTransaction();
     return data;
 }
 
@@ -61,12 +62,12 @@ void SPIRAM::WriteByte(uint32_t addr, unsigned char data)
 {
     SetMode(BYTE_MODE);
     REG_PORT_OUTCLR0 = PORT_PA07; //CS LOW
-    SPI.transfer(0x02);
+    SPI.transfer(WRITE);
     SPI.transfer((uint8_t)(addr >> 16));
     SPI.transfer((uint8_t)(addr >> 8));
     SPI.transfer((uint8_t)addr);
     SPI.transfer(data);
-    SPI.endTransaction();
+    // SPI.endTransaction();
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
 }
 
@@ -94,6 +95,20 @@ void SPIRAM::WritePage(uint32_t addr, unsigned char * buf)
         SPI.transfer(buf[i]);
     REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
     usedBytes+=PAGE_SIZE;
+}
+
+void SPIRAM::WriteStream(uint32_t addr, unsigned char * buf, uint32_t len)
+{
+    SetMode(STREAM_MODE);
+    REG_PORT_OUTCLR0 = PORT_PA07; //CS LOW
+    SPI.transfer(WRITE);
+    SPI.transfer((uint8_t)(addr >> 16));
+    SPI.transfer((uint8_t)(addr >> 8));
+    SPI.transfer((uint8_t)addr);
+    for(uint32_t i = 0; i<len; i++)
+        SPI.transfer(buf[i]);
+    REG_PORT_OUTSET0 = PORT_PA07; //CS HIGH
+    usedBytes+=len;
 }
 
 //Used for testing on-board RAM

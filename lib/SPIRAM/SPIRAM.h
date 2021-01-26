@@ -6,6 +6,7 @@
 //LY68L6400SLIT
 
 #define PAGE_SIZE 1024
+#define STREAM_CHUNK_SIZE 32
 
 #define RDSR  5
 #define WRSR  1
@@ -28,6 +29,7 @@ public:
     void WriteByte(uint32_t addr, unsigned char data);
     void SetMode(char mode);
     void WritePage(uint32_t addr, unsigned char * buf);
+    void WriteStream(uint32_t addr, unsigned char * buf, uint32_t len);
     void Init();
     uint32_t usedBytes = 0;
 private:

@@ -49,15 +49,14 @@ bool VGMEngineClass::begin(File *f)
     {
         loopPos = header.EoF+4-1;
     }
-
+    stopDacStreamTimer();
     chipSetup();
-
     #if ENABLE_SPIRAM
         ram.Init();
     #endif
     resetDataBlocks();
     dacSampleReady = false;
-    activeDacStreamBlock = 0;
+    activeDacStreamBlock = 0xFF;
     storePCM();
     pcmBufferPosition = 0;
     waitSamples = 0;
@@ -133,7 +132,7 @@ bool VGMEngineClass::storePCM(bool skip)
 {
     bool isPCM = false;
     uint8_t openSlot = 0;
-    uint16_t curPage = 0;
+    uint32_t curChunk = 0;
     uint32_t count = 0;
     pcmBufferEndPosition = 0;
     while(file->peek() == 0x67) //PCM Block
@@ -166,15 +165,15 @@ bool VGMEngineClass::storePCM(bool skip)
         }
         else
         {
-            //Note: Writing in pages will likely result in wasted ram if the ending page only takes up a fraction of the total page size
-            uint32_t lastBlockEndPos = openSlot == 0 ? 0 : curPage*PAGE_SIZE;
-            uint8_t page[PAGE_SIZE];
-            uint16_t pagesRequired = ceil((double)dataBlocks[openSlot].DataLength / (double)PAGE_SIZE);
-            for(uint16_t i = 0; i<pagesRequired; i++)
+            //Using chunks in RAM stream-mode nearly halves loading times compared to byte-by-byte loading at the expense of a slight amount of wasted space
+            uint32_t lastBlockEndPos = openSlot == 0 ? 0 : curChunk*STREAM_CHUNK_SIZE;
+            uint8_t streamChunk[STREAM_CHUNK_SIZE];
+            uint32_t chunksRequired = ceil((double)dataBlocks[openSlot].DataLength / (double)STREAM_CHUNK_SIZE);
+            for(uint32_t i = 0; i<chunksRequired; i++)
             {
-                file->readBytes(page, PAGE_SIZE);
-                ram.WritePage(curPage*PAGE_SIZE, page);
-                curPage++;
+                file->readBytes(streamChunk, STREAM_CHUNK_SIZE);
+                ram.WriteStream(curChunk*STREAM_CHUNK_SIZE, streamChunk, STREAM_CHUNK_SIZE);
+                curChunk++;
             }
             count++;
             if(header.vgmDataOffset == 0)
@@ -182,10 +181,7 @@ bool VGMEngineClass::storePCM(bool skip)
             else
                 file->seek(header.vgmDataOffset+0x34+pcmBufferEndPosition+(7*count));
 
-
             dataBlocks[openSlot].DataStart = lastBlockEndPos;
-
-
             //byte-by-byte
             // uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
             // for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
@@ -485,7 +481,7 @@ uint16_t VGMEngineClass::parseVGM()
                     state = END_OF_TRACK;
                 return 0;
         }
-    }
+    }    
 }
 
 VGMEngineClass VGMEngine;

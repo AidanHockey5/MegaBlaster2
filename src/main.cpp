@@ -104,7 +104,7 @@ Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 
 YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
 SN76489 sn(&bus, 2);
-const uint8_t IRQTestPin = A4;
+const uint8_t IRQTestPin = 51;
 
 //VGM Variables
 uint16_t loopCount = 0;
@@ -266,8 +266,8 @@ void setup()
   randomSeed(trngGetRandomNumber());
 
   //DEBUG
-  pinMode(DEBUG_LED, INPUT_PULLUP);
-  //digitalWrite(DEBUG_LED, LOW);
+  //pinMode(DEBUG_LED, INPUT_PULLUP);
+  pinMode(IRQTestPin, INPUT);
 
   resetSleepSpin();
 
