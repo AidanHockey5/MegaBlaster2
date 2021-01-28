@@ -152,6 +152,7 @@ bool VGMEngineClass::storePCM(bool skip)
         file->read(); //datatype
         file->read(&dataBlocks[openSlot].DataLength, 4); //PCM chunk size
         //ram.usedBytes+=dataBlocks[openSlot].DataLength;
+        dataBlocks[openSlot].absoluteDataStartInBank = pcmBufferEndPosition;
         pcmBufferEndPosition+=dataBlocks[openSlot].DataLength;
         if(skip)            //On loop, you'll want to just skip the PCM block since it's already loaded.
         {
@@ -182,6 +183,9 @@ bool VGMEngineClass::storePCM(bool skip)
                 file->seek(header.vgmDataOffset+0x34+pcmBufferEndPosition+(7*count));
 
             dataBlocks[openSlot].DataStart = lastBlockEndPos;
+            
+            
+            
             //byte-by-byte
             // uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
             // for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
@@ -292,6 +296,10 @@ VGMEngineState VGMEngineClass::play()
             dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
                 ym2612->write(0x2A, ram.ReadByte(dacStreamBufPos++), 0);
+            else if(bitRead(dataBlocks[activeDacStreamBlock].LengthMode, 7)) //Looping length mode defined in 0x93 DAC STREAM
+            {
+                dacStreamBufPos = dataBlocks[activeDacStreamBlock].DataStart;
+            }
             else
                 activeDacStreamBlock = 0xFF;
             dacSampleCountDown++;
@@ -448,8 +456,20 @@ uint16_t VGMEngineClass::parseVGM()
                 //Come back to this one
                 readBufOne(); //skip stream ID
                 dacStreamBufPos = readBuf32();
-                uint8_t lengthMode = readBufOne();
+                uint8_t lmode = readBufOne(); //Length mode
+                //Serial.print("LMODE: "); Serial.print(lmode, BIN);
                 dacStreamCurLength = readBuf32();
+                //Serial.print("BUF POS: "); Serial.println(dacStreamBufPos);
+                for(uint8_t i = 0; i<MAX_DATA_BLOCKS_IN_BANK; i++)
+                {
+                    if(dataBlocks[i].absoluteDataStartInBank == dacStreamBufPos)
+                    {
+                        activeDacStreamBlock = i;
+                        dataBlocks[i].LengthMode = lmode;
+                        //Serial.print("FOUND BLOCK: "); Serial.println(i);
+                        break;
+                    }
+                }
                 //Serial.println("0x93: "); //Serial.print(streamID, HEX); Serial.print(" "); Serial.print(dStart, HEX); Serial.print(" "); Serial.print(lengthMode, HEX); Serial.print(" "); Serial.print(dLength); Serial.println("   --- START STREAM");
             }
             break;
@@ -465,10 +485,11 @@ uint16_t VGMEngineClass::parseVGM()
             {
                 readBufOne(); //skip stream ID
                 uint16_t blockID = readBuf16();
-                uint8_t flags = readBufOne();
+                uint8_t flags = readBufOne(); //flags
                 dacStreamBufPos = dataBlocks[blockID].DataStart;
                 dacStreamCurLength = dataBlocks[blockID].DataLength;
                 activeDacStreamBlock = blockID;
+                dataBlocks[blockID].LengthMode = bitRead(flags, 0) == 1 ? 0b10000001 : 0; //Set proper loop flag. VGMSpec, why the hell did you pick a different bit for the same flag as the 0x93 command. Stupid!
                //Serial.print("0x95: "); // Serial.print(streamID, HEX); Serial.print(" "); Serial.print(blockID, HEX); Serial.print(" "); Serial.print(flags, HEX); Serial.println("   --- START STREAM FAST");
                 //Serial.print("BLOCK ID: "); Serial.println(blockID);
             }

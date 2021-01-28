@@ -21,6 +21,7 @@
 #include "clocks.h"
 #include "Bounce2.h"
 #include "LinkedList.h"
+#include "logo.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -168,9 +169,9 @@ bool isOledOn = true;
 
 //Buttons
 const int prev_btn = 47;    //PORT_PB00;
-const int rand_btn = 48;    //PORT_PB01;
+const int down_btn = 48;    //PORT_PB01;
 const int next_btn = 49;    //PORT_PB04;
-const int option_btn = 50;  //PORT_PB05;
+const int up_btn = 50;  //PORT_PB05;
 const int select_btn = 19;  //PORT_PB09;
 Bounce buttons[5];
 
@@ -279,9 +280,9 @@ void setup()
   }
   buttons[0].attach(next_btn, INPUT_PULLUP);
   buttons[1].attach(prev_btn, INPUT_PULLUP);
-  buttons[2].attach(option_btn, INPUT_PULLUP);
+  buttons[2].attach(up_btn, INPUT_PULLUP);
   buttons[3].attach(select_btn, INPUT_PULLUP);
-  buttons[4].attach(rand_btn, INPUT_PULLUP);
+  buttons[4].attach(down_btn, INPUT_PULLUP);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
@@ -299,13 +300,11 @@ void setup()
   IRQSelfTest(); //Test the OPN via it's timers to make sure it's legit
   #endif
 
-  //OLED
-  // oled.begin();
-  // oled.setFont(u8g2_font_fub11_tf);
-  // oled.drawXBM(0,0, logo_width, logo_height, logo);
-  // oled.sendBuffer();
+  //OLED title logo
+  // u8g2.drawXBM(0,0, logo_width, logo_height, logo);
+  // u8g2.sendBuffer();
   // delay(3000);
-  // oled.clearDisplay();
+  // u8g2.clearDisplay();
 
   //SD
   REG_PORT_DIRSET0 = PORT_PA15; //Set PA15 to output
@@ -689,9 +688,53 @@ void getDirIndices(String dir, String fname)
   }
   if(dirStartIndex == 0xFFFFFFFF)
     dirStartIndex = 0;
-  // Serial.print("START: "); Serial.println(dirStartIndex);
-  // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
-  // Serial.print("END: "); Serial.println(dirEndIndex);
+
+
+
+
+
+  // fname += '\r'; //stupid invisible carriage return
+  // if(dir.startsWith("/"))
+  //   dir.replace("/", "");
+  // if(dir == "")
+  //   dir = "~/";
+  // // Serial.print("INCOMING DIR: "); Serial.println(dir);
+  // // Serial.print("INCOMING FNAME: "); Serial.println(fname);
+  // dirStartIndex = 0xFFFFFFFF;
+  // dirEndIndex = 0; 
+  // dirCurIndex = 0;
+  // manifest.open(MANIFEST_PATH, O_READ);
+  // manifest.seek(0);
+  // manifest.readStringUntil('\n'); //Skip machine generated preamble
+  // for(uint32_t i = 0; i<numberOfFiles; i++)
+  // {
+  //   String cur = manifest.readStringUntil('\n');
+  //   cur.replace(String(i)+":", "");
+  //   if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
+  //   {
+  //     String curDir = readStringUntil(cur, '/'); //that's what this check is for, though this might screw up files on the root.
+  //     if(curDir.equals(dir))
+  //     {
+  //       Serial.print("CUR: "); Serial.println(cur);
+  //       Serial.print("DIR: "); Serial.println(dir);
+  //       Serial.print("CURDIR: "); Serial.println(curDir);
+  //       Serial.print("FNAME: "); Serial.println(fname);
+  //       if(dirStartIndex == 0xFFFFFFFF)
+  //         dirStartIndex = i;
+  //       if(cur.endsWith(fname)) 
+  //         dirCurIndex = i;
+  //       dirEndIndex = i;
+  //       //break;
+  //     }
+  //   }
+  //   else if(dirStartIndex != 0xFFFFFFFF)
+  //     break;
+  // }
+  // if(dirStartIndex == 0xFFFFFFFF)
+  //   dirStartIndex = 0;
+  // // Serial.print("START: "); Serial.println(dirStartIndex);
+  // // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
+  // // Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
 bool contains(String & in, char find)
@@ -1037,7 +1080,7 @@ void loop()
         startTrack(PREV);
     }
   }
-  if(buttons[2].fell()) //Option
+  if(buttons[2].fell()) //Up
   {
     if(menuState == IN_MENU)
       nav.doNav(navCmd(downCmd));
@@ -1054,7 +1097,7 @@ void loop()
         nav.refresh();
       }
     }
-  if(buttons[4].fell())//Rand
+  if(buttons[4].fell())//Down
   {
     if(menuState == IN_MENU)
       nav.doNav(navCmd(upCmd));

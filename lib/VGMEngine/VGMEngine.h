@@ -23,17 +23,18 @@ enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK};
 struct DataBlock //slightly modified version of Natalie's data block structure
 {
     bool slotOccupied;
-    uint32_t Seq;
+    //uint32_t Seq;
     //uint8_t DataBankId;
-    uint8_t DataBlockId;
+    //uint8_t DataBlockId;
     //uint8_t ChipCommand;
     //uint8_t ChipPort;
     uint32_t SampleRate;
     uint32_t DataStart;
+    uint32_t absoluteDataStartInBank;
     uint8_t LengthMode;
     uint32_t DataLength;
-    uint32_t ReadOffset;
-    uint32_t BytesFilled;
+    //uint32_t ReadOffset;
+    //uint32_t BytesFilled;
 };
 
 class VGMEngineClass

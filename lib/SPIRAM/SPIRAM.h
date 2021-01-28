@@ -2,6 +2,7 @@
 #ifndef SPIRAM_H_
 #define SPIRAM_H_
 #include <Arduino.h>
+#include <SPI.h>
 
 //LY68L6400SLIT
 
@@ -21,6 +22,8 @@
 #define PAGE_MODE (0x80 | HOLD)
 #define STREAM_MODE (0x40 | HOLD)
 
+
+
 class SPIRAM
 {
 public:
@@ -35,6 +38,7 @@ public:
 private:
     int _CS;
     char currentMode;
+    const SPISettings spiCfg = SPISettings(60000000, MSBFIRST, SPI_MODE0);
     //char block[124000]; //You can use this if you just want to test on-board RAM
 };
 #endif
