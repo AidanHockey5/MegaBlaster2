@@ -1,0 +1,53 @@
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+SAMDTimerInterrupt	KEYWORD1
+SAMDTimer	KEYWORD1
+SAMD_ISRTimer KEYWORD1
+SAMD_ISR_Timer KEYWORD1
+SAMDTimerNumber KEYWORD1
+timerCallback KEYWORD1
+timerCallback_p KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+##############################
+# Class SAMDTimerInterrupt
+##############################
+
+setFrequency	KEYWORD2
+setInterval	KEYWORD2
+attachInterrupt	KEYWORD2
+attachInterruptInterval	KEYWORD2
+detachInterrupt	KEYWORD2
+disableTimer	KEYWORD2
+reattachInterrupt	KEYWORD2
+enableTimer	KEYWORD2
+stopTimer	KEYWORD2
+restartTimer	KEYWORD2
+
+##############################
+# Class SAMD_ISR_Timer
+##############################
+
+run KEYWORD2
+setTimeout  KEYWORD2
+setTimer  KEYWORD2
+changeInterval  KEYWORD2
+deleteTimer KEYWORD2
+restartTimer  KEYWORD2
+isEnabled KEYWORD2
+enable  KEYWORD2
+disable KEYWORD2
+enableAll KEYWORD2
+disableAll  KEYWORD2
+toggle  KEYWORD2
+getNumTimers  KEYWORD2
+getNumAvailableTimers KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################

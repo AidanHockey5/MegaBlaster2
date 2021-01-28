@@ -13,12 +13,15 @@
 #include "YM2612.h"
 #include "SN76489.h"
 #include "Adafruit_ZeroTimer.h"
+//#include "SAMDTimerInterrupt.h"
+//#include "SAMD_ISR_Timer.h"
 #include "logo.h"
 #include "SpinSleep.h"
 #include "SerialUtils.h"
 #include "clocks.h"
 #include "Bounce2.h"
 #include "LinkedList.h"
+#include "logo.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -42,9 +45,9 @@ enum MenuState {IN_MENU, IN_VGM};
 void setup();
 void loop();
 void handleSerialIn();
-void tick();
-void setISR();
-void pauseISR();
+void tick44k1();
+void set44k1ISR();
+void stop44k1();
 void handleButtons();
 void prepareChips();
 void readGD3();
@@ -93,13 +96,16 @@ uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifes
 LinkedList<int> randList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 int randIndex = 0; 
 
-Adafruit_ZeroTimer zerotimer = Adafruit_ZeroTimer(3);
+Adafruit_ZeroTimer timer1 = Adafruit_ZeroTimer(3);
+Adafruit_ZeroTimer timer2 = Adafruit_ZeroTimer(4);
+//SAMDTimer ITimer(TIMER_TC3);
+//SAMDTimer dacStreamTimer(MAX_TIMER);
 
 Bus bus(0, 1, 8, 9, 11, 10, 12, 13);
 
 YM2612 opn(&bus, 3, NULL, 6, 4, 5, 7);
 SN76489 sn(&bus, 2);
-const uint8_t IRQTestPin = A4;
+const uint8_t IRQTestPin = 51;
 
 //VGM Variables
 uint16_t loopCount = 0;
@@ -163,9 +169,9 @@ bool isOledOn = true;
 
 //Buttons
 const int prev_btn = 47;    //PORT_PB00;
-const int rand_btn = 48;    //PORT_PB01;
+const int down_btn = 48;    //PORT_PB01;
 const int next_btn = 49;    //PORT_PB04;
-const int option_btn = 50;  //PORT_PB05;
+const int up_btn = 50;  //PORT_PB05;
 const int select_btn = 19;  //PORT_PB09;
 Bounce buttons[5];
 
@@ -174,6 +180,69 @@ uint32_t bufferPos = 0;
 uint32_t cmdPos = 0;
 uint16_t waitSamples = 0;
 uint32_t pcmBufferPosition = 0;
+
+void TC3_Handler() 
+{
+  Adafruit_ZeroTimer::timerHandler(3);
+}
+
+void TC4_Handler() 
+{
+  Adafruit_ZeroTimer::timerHandler(4);
+}
+
+void tick44k1(void) //44.1KHz tick
+{
+  VGMEngine.tick44k1();
+}
+
+void stop44k1()
+{
+  timer1.enable(false);
+}
+
+void set44k1ISR()
+{
+  //44.1KHz target, actual 44,117Hz
+  const uint16_t compare = 1088;
+  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+  timer1.enable(false);
+  timer1.configure(prescaler,       // prescaler
+        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+        );
+  timer1.setCompare(0, compare);
+  timer1.setCallback(true, TC_CALLBACK_CC_CHANNEL0, tick44k1);
+  timer1.enable(true);
+}
+
+void tickDacStream()
+{
+  VGMEngine.tickDacStream();
+}
+
+void stopDacStreamTimer()
+{
+  timer2.enable(false);
+}
+
+void setDacStreamTimer(uint32_t frequency)
+{
+  float prescale = 1;
+  float period = (1000000.0f / frequency);
+  float compare = (48000000L / (prescale/(period/1000000L)))-1;
+
+  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+  timer2.enable(false);
+  timer2.configure(prescaler,       // prescaler
+        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+        );
+  timer2.setCompare(0, compare);
+  timer2.setCallback(true, TC_CALLBACK_CC_CHANNEL0, tickDacStream);
+  timer2.enable(true);
+  //Serial.println(frequency);
+}
 
 void setup()
 {
@@ -189,13 +258,17 @@ void setup()
   si5351.set_freq(NTSC_YMCLK*100ULL, SI5351_CLK0); //CLK0 YM
   si5351.set_freq(NTSC_COLORBURST*100ULL, SI5351_CLK1); //CLK1 PSG - VALUES IN 0.01Hz
 
+  //Timers
+  VGMEngine.setDacStreamTimer = &setDacStreamTimer;
+  VGMEngine.stopDacStreamTimer = &stopDacStreamTimer;
+
   //RNG
   trngInit();
   randomSeed(trngGetRandomNumber());
 
   //DEBUG
-  pinMode(DEBUG_LED, INPUT_PULLUP);
-  //digitalWrite(DEBUG_LED, LOW);
+  //pinMode(DEBUG_LED, INPUT_PULLUP);
+  pinMode(IRQTestPin, INPUT);
 
   resetSleepSpin();
 
@@ -207,9 +280,9 @@ void setup()
   }
   buttons[0].attach(next_btn, INPUT_PULLUP);
   buttons[1].attach(prev_btn, INPUT_PULLUP);
-  buttons[2].attach(option_btn, INPUT_PULLUP);
+  buttons[2].attach(up_btn, INPUT_PULLUP);
   buttons[3].attach(select_btn, INPUT_PULLUP);
-  buttons[4].attach(rand_btn, INPUT_PULLUP);
+  buttons[4].attach(down_btn, INPUT_PULLUP);
 
   //Set Chips
   VGMEngine.ym2612 = &opn;
@@ -227,13 +300,11 @@ void setup()
   IRQSelfTest(); //Test the OPN via it's timers to make sure it's legit
   #endif
 
-  //OLED
-  // oled.begin();
-  // oled.setFont(u8g2_font_fub11_tf);
-  // oled.drawXBM(0,0, logo_width, logo_height, logo);
-  // oled.sendBuffer();
+  //OLED title logo
+  // u8g2.drawXBM(0,0, logo_width, logo_height, logo);
+  // u8g2.sendBuffer();
   // delay(3000);
-  // oled.clearDisplay();
+  // u8g2.clearDisplay();
 
   //SD
   REG_PORT_DIRSET0 = PORT_PA15; //Set PA15 to output
@@ -300,36 +371,6 @@ void IRQSelfTest() //Use the IRQ pin and the built-in OPN timers to determine if
   opn.clearYMTimerA();
 }
 
-void TC3_Handler() 
-{
-  Adafruit_ZeroTimer::timerHandler(3);
-}
-
-void TimerCallback0(void) //44.1KHz tick
-{
-  VGMEngine.tick();
-}
-
-void pauseISR()
-{
-  zerotimer.enable(false);
-}
-
-void setISR()
-{
-  //44.1KHz target, actual 44,117Hz
-  const uint16_t compare = 1088;
-  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
-  zerotimer.enable(false);
-  zerotimer.configure(prescaler,       // prescaler
-        TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
-        TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
-        );
-  zerotimer.setCompare(0, compare);
-  zerotimer.setCallback(true, TC_CALLBACK_CC_CHANNEL0, TimerCallback0);
-  zerotimer.enable(true);
-}
-
 void drawOLEDTrackInfo()
 {
   if(isOledOn)
@@ -340,10 +381,18 @@ void drawOLEDTrackInfo()
     u8g2.clearDisplay();
     u8g2.setFont(u8g2_font_helvR08_tr);
     u8g2.sendBuffer();
-    u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
-    u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
-    u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
-    u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+    if(wstrlen(VGMEngine.gd3.enTrackName) != 1) //No track name was seen in the GD3
+    {
+      u8g2.drawStr(0,10, widetochar(VGMEngine.gd3.enTrackName));
+      u8g2.drawStr(0,20, widetochar(VGMEngine.gd3.enGameName));
+      u8g2.drawStr(0,30, widetochar(VGMEngine.gd3.releaseDate));
+      u8g2.drawStr(0,40, widetochar(VGMEngine.gd3.enSystemName));
+    }
+    else
+    {
+      u8g2.drawStr(0,10, "No GD3 Data");
+    }
+
     char* cstr;
     String playmodeStatus;
     if(playMode == LOOP)
@@ -377,11 +426,14 @@ bool startTrack(FileStrategy fileStrategy, String request)
 {
   String filePath = "";
 
-  pauseISR();
+  stop44k1();
   ready = false;
   File nextFile;
   memset(fileName, 0x00, MAX_FILE_NAME_SIZE);
-
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(65, 64, " LOADING...");
+  u8g2.setDrawColor(1);
+  u8g2.sendBuffer();
   switch(fileStrategy)
   {
     case FIRST_START:
@@ -473,6 +525,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
   Serial.println(filePath);
   if(SD.exists(filePath.c_str()))
     file.close();
+  opn.reset();
+  sn.reset();
   file = SD.open(filePath.c_str(), FILE_READ);
   if(!file)
   {
@@ -490,7 +544,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       printlnw(VGMEngine.gd3.releaseDate);
       if(menuState == IN_VGM)
         drawOLEDTrackInfo();
-      setISR();
+      set44k1ISR();
       return true;
     }
     else
@@ -501,14 +555,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
 
   fail:
-  setISR();
+  set44k1ISR();
   return false;
-}
-
-//Count at 44.1KHz
-void tick()
-{
-  VGMEngine.tick();
 }
 
 //Poll the serial port
@@ -516,7 +564,7 @@ void handleSerialIn()
 {
   while(Serial.available())
   {
-    pauseISR();
+    stop44k1();
     char serialCmd = Serial.read();
     switch(serialCmd)
     {
@@ -566,7 +614,7 @@ void handleSerialIn()
     }
   }
   Serial.flush();
-  setISR();
+  set44k1ISR();
 }
 
 void clearRandomHistory()
@@ -640,9 +688,53 @@ void getDirIndices(String dir, String fname)
   }
   if(dirStartIndex == 0xFFFFFFFF)
     dirStartIndex = 0;
-  // Serial.print("START: "); Serial.println(dirStartIndex);
-  // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
-  // Serial.print("END: "); Serial.println(dirEndIndex);
+
+
+
+
+
+  // fname += '\r'; //stupid invisible carriage return
+  // if(dir.startsWith("/"))
+  //   dir.replace("/", "");
+  // if(dir == "")
+  //   dir = "~/";
+  // // Serial.print("INCOMING DIR: "); Serial.println(dir);
+  // // Serial.print("INCOMING FNAME: "); Serial.println(fname);
+  // dirStartIndex = 0xFFFFFFFF;
+  // dirEndIndex = 0; 
+  // dirCurIndex = 0;
+  // manifest.open(MANIFEST_PATH, O_READ);
+  // manifest.seek(0);
+  // manifest.readStringUntil('\n'); //Skip machine generated preamble
+  // for(uint32_t i = 0; i<numberOfFiles; i++)
+  // {
+  //   String cur = manifest.readStringUntil('\n');
+  //   cur.replace(String(i)+":", "");
+  //   if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
+  //   {
+  //     String curDir = readStringUntil(cur, '/'); //that's what this check is for, though this might screw up files on the root.
+  //     if(curDir.equals(dir))
+  //     {
+  //       Serial.print("CUR: "); Serial.println(cur);
+  //       Serial.print("DIR: "); Serial.println(dir);
+  //       Serial.print("CURDIR: "); Serial.println(curDir);
+  //       Serial.print("FNAME: "); Serial.println(fname);
+  //       if(dirStartIndex == 0xFFFFFFFF)
+  //         dirStartIndex = i;
+  //       if(cur.endsWith(fname)) 
+  //         dirCurIndex = i;
+  //       dirEndIndex = i;
+  //       //break;
+  //     }
+  //   }
+  //   else if(dirStartIndex != 0xFFFFFFFF)
+  //     break;
+  // }
+  // if(dirStartIndex == 0xFFFFFFFF)
+  //   dirStartIndex = 0;
+  // // Serial.print("START: "); Serial.println(dirStartIndex);
+  // // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
+  // // Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
 bool contains(String & in, char find)
@@ -988,7 +1080,7 @@ void loop()
         startTrack(PREV);
     }
   }
-  if(buttons[2].fell()) //Option
+  if(buttons[2].fell()) //Up
   {
     if(menuState == IN_MENU)
       nav.doNav(navCmd(downCmd));
@@ -1005,7 +1097,7 @@ void loop()
         nav.refresh();
       }
     }
-  if(buttons[4].fell())//Rand
+  if(buttons[4].fell())//Down
   {
     if(menuState == IN_MENU)
       nav.doNav(navCmd(upCmd));

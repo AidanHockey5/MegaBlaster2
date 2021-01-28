@@ -15,9 +15,27 @@
 
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define MAX_PCM_BUFFER_SIZE 8388607
+#define MAX_DATA_BLOCKS_IN_BANK 40
 #define COMMAND_ERROR_SKIP_THRESHOLD 20 //If you encounter x bad commands, just skip the track
 
 enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK};
+
+struct DataBlock //slightly modified version of Natalie's data block structure
+{
+    bool slotOccupied;
+    //uint32_t Seq;
+    //uint8_t DataBankId;
+    //uint8_t DataBlockId;
+    //uint8_t ChipCommand;
+    //uint8_t ChipPort;
+    uint32_t SampleRate;
+    uint32_t DataStart;
+    uint32_t absoluteDataStartInBank;
+    uint8_t LengthMode;
+    uint32_t DataLength;
+    //uint32_t ReadOffset;
+    //uint32_t BytesFilled;
+};
 
 class VGMEngineClass
 {
@@ -37,7 +55,8 @@ public:
         YM2612* ym2612; 
     #endif
     bool load(bool singleChunk = false);
-    void tick();
+    void tick44k1();
+    void tickDacStream();
     VGMEngineState play();
     uint16_t getLoops();
     uint16_t maxLoops = 3;
@@ -45,7 +64,8 @@ public:
     bool resetISR = false;
     bool isBusy = false;
     void ramtest();
-
+    void (*setDacStreamTimer)(uint32_t);
+    void (*stopDacStreamTimer)(void);
 private:
     File* file;
     static const uint32_t VGM_BUF_SIZE = 16384;
@@ -54,10 +74,23 @@ private:
     bool bufLock = false;
     uint16_t badCommandCount = 0;
     uint32_t pcmBufferPosition = 0;
+    uint32_t pcmBufferEndPosition = 0;
     uint32_t loopPos = 0; //The location of the 0x66 command
     uint16_t loopCount = 0;
     MegaStreamContext_t stream;
     uint8_t buf[VGM_BUF_SIZE];
+    DataBlock dataBlocks[MAX_DATA_BLOCKS_IN_BANK];
+    void resetDataBlocks();
+    uint8_t dataBlockChipCommand;
+    uint8_t dataBlockChipPort;
+    uint8_t dataBlockStepSize;
+    uint8_t dataBlockStepBase;
+    uint32_t dacStreamBufPos;
+    uint32_t dacStreamCurLength;
+    int32_t dacSampleReady = false;
+    uint8_t activeDacStreamBlock;
+    int32_t dacSampleCountDown;
+
     uint8_t readBufOne(); 
     uint16_t readBuf16();
     uint32_t readBuf32();
