@@ -18,7 +18,7 @@ typedef unsigned int uint;
 #define my_max(a,b) (((a) > (b)) ? (a) : (b))
 #define my_min(a,b) (((a) < (b)) ? (a) : (b))
 
-#define IN_BUF_SIZE 2048
+#define IN_BUF_SIZE 10480
 static uint8 s_inbuf[IN_BUF_SIZE];
 
 #define OUT_BUF_SIZE (TINFL_LZ_DICT_SIZE)
@@ -26,17 +26,13 @@ static uint8 s_outbuf[OUT_BUF_SIZE];
 
 inline static bool Decompress(const char* pSrc_filename, const char* pDst_filename)
 {
-    //const char *pMode;
     File pInfile, pOutfile;
     uint32_t infile_size;
-    //    const char *pSrc_filename;
-    //    const char *pDst_filename;
     const void *next_in = s_inbuf;
     size_t avail_in = 0;
     void *next_out = s_outbuf;
     size_t avail_out = OUT_BUF_SIZE;
     size_t total_in = 0, total_out = 0;
-    //long file_loc;
 
     if(!pInfile.open(pSrc_filename, O_READ))
     {
@@ -66,14 +62,7 @@ inline static bool Decompress(const char* pSrc_filename, const char* pDst_filena
         {
             // Input buffer is empty, so read more bytes from input file.
             uint32_t n = my_min(IN_BUF_SIZE, infile_remaining);
-            pInfile.readBytes(s_inbuf, n); //Assume this is safe (verified)
-
-            // if (fread(s_inbuf, 1, n, pInfile) != n)
-            // {
-            //    printf("Failed reading from input file!\n");
-            //    return false;
-            // }
-
+            pInfile.readBytes(s_inbuf, n); 
             next_in = s_inbuf;
             avail_in = n;
 
@@ -124,7 +113,6 @@ inline static bool Decompress(const char* pSrc_filename, const char* pDst_filena
             }
         }
     }
-    Serial.println("DONE!");
     pInfile.close();
     pOutfile.close();
     return true;

@@ -534,13 +534,18 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
   else
   {
-
     //Check for VGZ. Decompress first if true
     uint16_t gzipmagic = 0;
     file.read(&gzipmagic, 2);
     if(gzipmagic == 0x8B1F) //File header starts with gzip magic number
     {
-      Serial.println("Found GZIP magic...");
+      opn.reset();
+      sn.reset();
+      u8g2.setDrawColor(0);
+      u8g2.drawStr(45, 64, " EXTRACTING...");
+      u8g2.setDrawColor(1);
+      u8g2.sendBuffer();
+      //Serial.println("Found GZIP magic...");
       const char* inName = filePath.c_str();
       //SD.remove(outName);
       //file.getName(inName, MAX_FILE_NAME_SIZE);
@@ -552,7 +557,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       }
       else
       {
-        Serial.println("DECOMPRESS OK!");
+        //Serial.println("DECOMPRESS OK!");
       }
       file = SD.open(TMP_DECOMPRESSION_FILE_PATH, FILE_READ);
       if(!file)
