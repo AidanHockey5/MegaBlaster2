@@ -22,6 +22,7 @@
 #include "Bounce2.h"
 #include "LinkedList.h"
 #include "logo.h"
+#include "decompress.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -79,6 +80,7 @@ const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
 #define MANIFEST_DIR "_SYS/"
 #define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
+#define TMP_DECOMPRESSION_FILE_PATH MANIFEST_DIR "/TMP.vgm"
 
 //SD & File Streaming
 SdFat SD;
@@ -425,7 +427,6 @@ void drawOLEDTrackInfo()
 bool startTrack(FileStrategy fileStrategy, String request)
 {
   String filePath = "";
-
   stop44k1();
   ready = false;
   File nextFile;
@@ -525,8 +526,6 @@ bool startTrack(FileStrategy fileStrategy, String request)
   Serial.println(filePath);
   if(SD.exists(filePath.c_str()))
     file.close();
-  opn.reset();
-  sn.reset();
   file = SD.open(filePath.c_str(), FILE_READ);
   if(!file)
   {
@@ -535,6 +534,36 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
   else
   {
+
+    //Check for VGZ. Decompress first if true
+    uint16_t gzipmagic = 0;
+    file.read(&gzipmagic, 2);
+    if(gzipmagic == 0x8B1F) //File header starts with gzip magic number
+    {
+      Serial.println("Found GZIP magic...");
+      const char* inName = filePath.c_str();
+      //SD.remove(outName);
+      //file.getName(inName, MAX_FILE_NAME_SIZE);
+      file.close();
+      if(!Decompress(inName, TMP_DECOMPRESSION_FILE_PATH))
+      {
+        Serial.println("Decompression failed");
+        while(true){};
+      }
+      else
+      {
+        Serial.println("DECOMPRESS OK!");
+      }
+      file = SD.open(TMP_DECOMPRESSION_FILE_PATH, FILE_READ);
+      if(!file)
+      {
+        Serial.println("Failed to read decompressed file");
+        goto fail;
+      }
+    }
+
+    opn.reset();
+    sn.reset();
     delay(100);
     if(VGMEngine.begin(&file))
     {
@@ -925,6 +954,8 @@ void CreateManifest(bool createNew)
       numberOfFiles = readFile32(&manifest);
       manifest.seekEnd(-4); //Read-in old manifest size
       prevBlocks = readFile32(&manifest);
+      SD.remove(TMP_DECOMPRESSION_FILE_PATH);
+
       if(prevBlocks != SD.vol()->freeClusterCount())
         createNewManifest = true;
     }
