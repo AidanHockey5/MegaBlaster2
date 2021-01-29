@@ -566,7 +566,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
         goto fail;
       }
     }
-
+    file.seek(0);
     opn.reset();
     sn.reset();
     delay(100);
