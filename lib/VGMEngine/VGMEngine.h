@@ -18,7 +18,7 @@
 #define MAX_DATA_BLOCKS_IN_BANK 40
 #define COMMAND_ERROR_SKIP_THRESHOLD 20 //If you encounter x bad commands, just skip the track
 
-enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK};
+enum VGMEngineState {PLAYING, IDLE, END_OF_TRACK, ERROR};
 
 struct DataBlock //slightly modified version of Natalie's data block structure
 {

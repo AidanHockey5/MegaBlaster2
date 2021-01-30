@@ -22,6 +22,7 @@
 #include "Bounce2.h"
 #include "LinkedList.h"
 #include "logo.h"
+#include "decompress.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -74,11 +75,13 @@ void removeMeta();
 void clearRandomHistory();
 void IRQ_ISR();
 void IRQSelfTest();
+void alertErrorState();
 
 const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
 #define MANIFEST_DIR "_SYS/"
 #define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
+#define TMP_DECOMPRESSION_FILE_PATH MANIFEST_DIR "/TMP.vgm"
 
 //SD & File Streaming
 SdFat SD;
@@ -425,7 +428,6 @@ void drawOLEDTrackInfo()
 bool startTrack(FileStrategy fileStrategy, String request)
 {
   String filePath = "";
-
   stop44k1();
   ready = false;
   File nextFile;
@@ -522,11 +524,9 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
 
   filePath.trim();
-  Serial.println(filePath);
+  strncpy(fileName, filePath.c_str(), MAX_FILE_NAME_SIZE);
   if(SD.exists(filePath.c_str()))
     file.close();
-  opn.reset();
-  sn.reset();
   file = SD.open(filePath.c_str(), FILE_READ);
   if(!file)
   {
@@ -535,6 +535,41 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
   else
   {
+    //Check for VGZ. Decompress first if true
+    uint16_t gzipmagic = 0;
+    file.read(&gzipmagic, 2);
+    if(gzipmagic == 0x8B1F) //File header starts with gzip magic number
+    {
+      opn.reset();
+      sn.reset();
+      u8g2.setDrawColor(0);
+      u8g2.drawStr(45, 64, " EXTRACTING...");
+      u8g2.setDrawColor(1);
+      u8g2.sendBuffer();
+      //Serial.println("Found GZIP magic...");
+      const char* inName = filePath.c_str();
+      //SD.remove(outName);
+      //file.getName(inName, MAX_FILE_NAME_SIZE);
+      file.close();
+      if(!Decompress(inName, TMP_DECOMPRESSION_FILE_PATH))
+      {
+        Serial.println("Decompression failed");
+        while(true){};
+      }
+      else
+      {
+        //Serial.println("DECOMPRESS OK!");
+      }
+      file = SD.open(TMP_DECOMPRESSION_FILE_PATH, FILE_READ);
+      if(!file)
+      {
+        Serial.println("Failed to read decompressed file");
+        goto fail;
+      }
+    }
+    file.seek(0);
+    opn.reset();
+    sn.reset();
     delay(100);
     if(VGMEngine.begin(&file))
     {
@@ -925,6 +960,8 @@ void CreateManifest(bool createNew)
       numberOfFiles = readFile32(&manifest);
       manifest.seekEnd(-4); //Read-in old manifest size
       prevBlocks = readFile32(&manifest);
+      SD.remove(TMP_DECOMPRESSION_FILE_PATH);
+
       if(prevBlocks != SD.vol()->freeClusterCount())
         createNewManifest = true;
     }
@@ -1035,6 +1072,35 @@ void removeMeta() //Remove useless meta files
   SD.vwd()->rewind();
 }
 
+void alertErrorState()
+{
+    menuState = IN_VGM;
+    u8g2.clearBuffer();
+    u8g2.setDrawColor(1);
+    u8g2.drawStr(0,16,"Invalid File Loaded!");
+    u8g2.drawStr(0,32,fileName);
+    u8g2.drawStr(0,48,"Press any button to");
+    u8g2.drawStr(0,64,"return to menu...");
+    u8g2.sendBuffer();
+    while(true)
+    {
+      bool pressed = false;
+      //Debounced buttons
+      for(uint8_t i = 0; i<5; i++)
+      {
+        buttons[i].update();
+        if(buttons[i].fell())
+          pressed = true;
+      }
+      if(pressed)
+        break;
+    }
+    delay(100);
+    menuState = IN_MENU;
+    VGMEngine.state = VGMEngineState::IDLE;
+    nav.refresh();
+}
+
 void loop()
 {    
   switch(VGMEngine.play())
@@ -1046,6 +1112,9 @@ void loop()
         startTrack(NEXT);
     break;
     case VGMEngineState::PLAYING:
+    break;
+    case  VGMEngineState::ERROR:
+      alertErrorState();
     break;
   }
 
