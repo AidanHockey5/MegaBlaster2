@@ -30,7 +30,7 @@ bool VGMEngineClass::begin(File *f)
     file = f;
     if(!header.read(file))
     {
-        state = END_OF_TRACK;
+        state = ERROR;
         return false;
     }
     gd3.read(file, header.gd3Offset+0x14);
@@ -316,6 +316,9 @@ VGMEngineState VGMEngineClass::play()
             state = END_OF_TRACK;
         }
         return PLAYING;
+    break;
+    case ERROR:
+        return ERROR;
     break;
     }
 }

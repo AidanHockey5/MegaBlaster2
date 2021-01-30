@@ -75,6 +75,7 @@ void removeMeta();
 void clearRandomHistory();
 void IRQ_ISR();
 void IRQSelfTest();
+void alertErrorState();
 
 const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
@@ -523,7 +524,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
 
   filePath.trim();
-  Serial.println(filePath);
+  strncpy(fileName, filePath.c_str(), MAX_FILE_NAME_SIZE);
   if(SD.exists(filePath.c_str()))
     file.close();
   file = SD.open(filePath.c_str(), FILE_READ);
@@ -1071,6 +1072,35 @@ void removeMeta() //Remove useless meta files
   SD.vwd()->rewind();
 }
 
+void alertErrorState()
+{
+    menuState = IN_VGM;
+    u8g2.clearBuffer();
+    u8g2.setDrawColor(1);
+    u8g2.drawStr(0,16,"Invalid File Loaded!");
+    u8g2.drawStr(0,32,fileName);
+    u8g2.drawStr(0,48,"Press any button to");
+    u8g2.drawStr(0,64,"return to menu...");
+    u8g2.sendBuffer();
+    while(true)
+    {
+      bool pressed = false;
+      //Debounced buttons
+      for(uint8_t i = 0; i<5; i++)
+      {
+        buttons[i].update();
+        if(buttons[i].fell())
+          pressed = true;
+      }
+      if(pressed)
+        break;
+    }
+    delay(100);
+    menuState = IN_MENU;
+    VGMEngine.state = VGMEngineState::IDLE;
+    nav.refresh();
+}
+
 void loop()
 {    
   switch(VGMEngine.play())
@@ -1082,6 +1112,9 @@ void loop()
         startTrack(NEXT);
     break;
     case VGMEngineState::PLAYING:
+    break;
+    case  VGMEngineState::ERROR:
+      alertErrorState();
     break;
   }
 
