@@ -49,6 +49,8 @@ bool VGMEngineClass::begin(File *f)
     {
         loopPos = header.EoF+4-1;
     }
+
+    isOneOff = header.loopOffset == 0;
     stopDacStreamTimer();
     chipSetup();
     #if ENABLE_SPIRAM
@@ -311,9 +313,14 @@ VGMEngineState VGMEngineClass::play()
         }
 
         isBusy = false;
-        if(loopCount >= maxLoops)
+        if(loopCount == maxLoops)
         {
             state = END_OF_TRACK;
+        }
+        if(isOneOff)
+        {
+            if(loopCount == 1 && !loopOneOffs)
+                state = END_OF_TRACK;
         }
         return PLAYING;
     break;

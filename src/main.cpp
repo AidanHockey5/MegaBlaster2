@@ -13,8 +13,6 @@
 #include "YM2612.h"
 #include "SN76489.h"
 #include "Adafruit_ZeroTimer.h"
-//#include "SAMDTimerInterrupt.h"
-//#include "SAMD_ISR_Timer.h"
 #include "logo.h"
 #include "SpinSleep.h"
 #include "SerialUtils.h"
@@ -147,11 +145,17 @@ CHOOSE(playMode,modeMenu,"Mode:",onChoosePlaymode,exitEvent,noStyle
   ,VALUE("Shuffle Dir",PlayMode::SHUFFLE_DIR,doNothing,noEvent)
 );
 
+TOGGLE(VGMEngine.loopOneOffs, setLoopOneOff, "Loop One-offs: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
 #define MAX_DEPTH 2
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
   ,SUBMENU(modeMenu)
-  ,FIELD(VGMEngine.maxLoops,"Loops","",0,255,1,10,doNothing,noEvent,noStyle)
+  ,FIELD(VGMEngine.maxLoops,"Loops: ","",0,255,1,10,doNothing,noEvent,noStyle)
+  ,SUBMENU(setLoopOneOff)
   ,OP("Rebuild Manifest",doCreateManifest,enterEvent)
   //,EXIT("<Back")
 );
@@ -558,7 +562,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
       }
       else
       {
-        //Serial.println("DECOMPRESS OK!");
+        u8g2.setDrawColor(0);
+        u8g2.drawStr(50, 64, " LOADING......");
+        u8g2.setDrawColor(1);
+        u8g2.sendBuffer();
       }
       file = SD.open(TMP_DECOMPRESSION_FILE_PATH, FILE_READ);
       if(!file)

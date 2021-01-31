@@ -60,6 +60,7 @@ public:
     VGMEngineState play();
     uint16_t getLoops();
     uint16_t maxLoops = 3;
+    bool loopOneOffs = false;
     VGMEngineState state = IDLE;
     bool resetISR = false;
     bool isBusy = false;
@@ -90,6 +91,7 @@ private:
     int32_t dacSampleReady = false;
     uint8_t activeDacStreamBlock;
     int32_t dacSampleCountDown;
+    bool isOneOff = false; //This track doesn't have a loop
 
     uint8_t readBufOne(); 
     uint16_t readBuf16();
