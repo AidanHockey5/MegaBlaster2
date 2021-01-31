@@ -21,6 +21,7 @@
 #include "LinkedList.h"
 #include "logo.h"
 #include "decompress.h"
+#include "FreeMem.h"
 
 extern "C" {
   #include "trngFunctions.h" //True random number generation
@@ -465,13 +466,11 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randList.add(rng);
           randIndex = randList.size()-1;
           filePath = GetPathFromManifest(rng);
-          Serial.println("This");
         }
         else //Otherwise, move up in history
         {
           randIndex++;
           filePath = GetPathFromManifest(randList.get(randIndex));
-          Serial.println("That");
         }
         dirCurIndex = randIndex;
       }
@@ -558,7 +557,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       if(!Decompress(inName, TMP_DECOMPRESSION_FILE_PATH))
       {
         Serial.println("Decompression failed");
-        while(true){};
+        goto fail;
       }
       else
       {
@@ -584,6 +583,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       printlnw(VGMEngine.gd3.enTrackName);
       printlnw(VGMEngine.gd3.enSystemName);
       printlnw(VGMEngine.gd3.releaseDate);
+      Serial.print("DYNAMIC BYTES FREE: "); Serial.println(freeMemory());
       if(menuState == IN_VGM)
         drawOLEDTrackInfo();
       set44k1ISR();
@@ -597,7 +597,9 @@ bool startTrack(FileStrategy fileStrategy, String request)
   }
 
   fail:
-  set44k1ISR();
+  VGMEngine.state = VGMEngineState::IDLE;
+  alertErrorState();
+  //set44k1ISR();
   return false;
 }
 
@@ -700,41 +702,6 @@ uint32_t countFilesInDir(String dir)
 
 void getDirIndices(String dir, String fname)
 {
-  fname += '\r'; //stupid invisible carriage return
-  if(dir.startsWith("/"))
-    dir.replace("/", "");
-  if(dir == "")
-    dir = "~/";
-  // Serial.print("INCOMING DIR: "); Serial.println(dir);
-  // Serial.print("INCOMING FNAME: "); Serial.println(fname);
-  dirStartIndex = 0xFFFFFFFF;
-  dirEndIndex = 0; 
-  dirCurIndex = 0;
-  manifest.open(MANIFEST_PATH, O_READ);
-  manifest.seek(0);
-  manifest.readStringUntil('\n'); //Skip machine generated preamble
-  for(uint32_t i = 0; i<numberOfFiles; i++)
-  {
-    String cur = manifest.readStringUntil('\n');
-    cur.replace(String(i)+":", "");
-    if(cur.startsWith(dir))
-    {
-      if(dirStartIndex == 0xFFFFFFFF)
-        dirStartIndex = i;
-      if(cur.endsWith(fname)) 
-        dirCurIndex = i;
-      dirEndIndex = i;
-    }
-    else if(dirStartIndex != 0xFFFFFFFF)
-      break;
-  }
-  if(dirStartIndex == 0xFFFFFFFF)
-    dirStartIndex = 0;
-
-
-
-
-
   // fname += '\r'; //stupid invisible carriage return
   // if(dir.startsWith("/"))
   //   dir.replace("/", "");
@@ -752,28 +719,87 @@ void getDirIndices(String dir, String fname)
   // {
   //   String cur = manifest.readStringUntil('\n');
   //   cur.replace(String(i)+":", "");
-  //   if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
+  //   if(cur.startsWith(dir))
   //   {
-  //     String curDir = readStringUntil(cur, '/'); //that's what this check is for, though this might screw up files on the root.
-  //     if(curDir.equals(dir))
-  //     {
-  //       Serial.print("CUR: "); Serial.println(cur);
-  //       Serial.print("DIR: "); Serial.println(dir);
-  //       Serial.print("CURDIR: "); Serial.println(curDir);
-  //       Serial.print("FNAME: "); Serial.println(fname);
-  //       if(dirStartIndex == 0xFFFFFFFF)
-  //         dirStartIndex = i;
-  //       if(cur.endsWith(fname)) 
-  //         dirCurIndex = i;
-  //       dirEndIndex = i;
-  //       //break;
-  //     }
+  //     if(dirStartIndex == 0xFFFFFFFF)
+  //       dirStartIndex = i;
+  //     if(cur.endsWith(fname)) 
+  //       dirCurIndex = i;
+  //     dirEndIndex = i;
   //   }
   //   else if(dirStartIndex != 0xFFFFFFFF)
   //     break;
   // }
   // if(dirStartIndex == 0xFFFFFFFF)
   //   dirStartIndex = 0;
+
+
+
+
+
+  fname += '\r'; //stupid invisible carriage return
+  if(dir.startsWith("/"))
+    dir.replace("/", "");
+  if(dir == "")
+    dir = "~/";
+  // Serial.print("INCOMING DIR: "); Serial.println(dir);
+  // Serial.print("INCOMING FNAME: "); Serial.println(fname);
+  dirStartIndex = 0xFFFFFFFF;
+  dirEndIndex = 0; 
+  dirCurIndex = 0;
+  manifest.open(MANIFEST_PATH, O_READ);
+  manifest.seek(0);
+  manifest.readStringUntil('\n'); //Skip machine generated preamble
+  if(dir == "~/") //Files are on the root
+  {
+    for(uint32_t i = 0; i<numberOfFiles; i++)
+    {
+      String cur = manifest.readStringUntil('\n');
+      cur.replace(String(i)+":", "");
+      if(cur.startsWith(dir))
+      {
+        if(dirStartIndex == 0xFFFFFFFF)
+          dirStartIndex = i;
+        if(cur.endsWith(fname)) 
+          dirCurIndex = i;
+        dirEndIndex = i;
+      }
+      else if(dirStartIndex != 0xFFFFFFFF)
+        break;
+    }
+    if(dirStartIndex == 0xFFFFFFFF)
+      dirStartIndex = 0;
+  }
+  else  //Files are in a dir
+  {
+    for(uint32_t i = 0; i<numberOfFiles; i++)
+    {
+      String cur = manifest.readStringUntil('\n');
+      cur.replace(String(i)+":", "");
+      if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
+      {
+        String curDir = readStringUntil(cur, '/'); //that's what this check is for, though this might screw up files on the root.
+        if(curDir.equals(dir))
+        {
+          Serial.print("CUR: "); Serial.println(cur);
+          Serial.print("DIR: "); Serial.println(dir);
+          Serial.print("CURDIR: "); Serial.println(curDir);
+          Serial.print("FNAME: "); Serial.println(fname);
+          if(dirStartIndex == 0xFFFFFFFF)
+            dirStartIndex = i;
+          if(cur.endsWith(fname)) 
+            dirCurIndex = i;
+          dirEndIndex = i;
+          //break;
+        }
+      }
+      else if(dirStartIndex != 0xFFFFFFFF)
+        break;
+    }
+    if(dirStartIndex == 0xFFFFFFFF)
+      dirStartIndex = 0;
+  }
+  
   // // Serial.print("START: "); Serial.println(dirStartIndex);
   // // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
   // // Serial.print("END: "); Serial.println(dirEndIndex);

@@ -18,7 +18,7 @@ typedef unsigned int uint;
 #define my_max(a,b) (((a) > (b)) ? (a) : (b))
 #define my_min(a,b) (((a) < (b)) ? (a) : (b))
 
-#define IN_BUF_SIZE 10480
+#define IN_BUF_SIZE TINFL_LZ_DICT_SIZE*2//10480
 static uint8 s_inbuf[IN_BUF_SIZE];
 
 #define OUT_BUF_SIZE (TINFL_LZ_DICT_SIZE)
