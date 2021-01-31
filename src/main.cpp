@@ -66,6 +66,7 @@ void getDirIndices(String dir, String fname);
 void getDirIndicesFromFullPath(String fullPath);
 uint32_t freeKB();
 void CreateManifest(bool createNew = false);
+bool VerifyManifest();
 result filePick(eventMask event, navNode& _nav, prompt &item);
 result doCreateManifest(); //Required for UI
 result onMenuIdle(menuOut& o, idleEvent e);
@@ -333,7 +334,12 @@ void setup()
 
   //Prepare files
   removeMeta();
-  CreateManifest();
+  bool manifestError = false;
+  do
+  {
+    CreateManifest(manifestError);
+    manifestError = !VerifyManifest();
+  }while(manifestError);
 
   nav.timeOut=0xFFFFFFFF; //This might be a slight issue if you decide to run your player for 50,000 days straight :/
   nav.idleTask = onMenuIdle;
@@ -702,41 +708,6 @@ uint32_t countFilesInDir(String dir)
 
 void getDirIndices(String dir, String fname)
 {
-  // fname += '\r'; //stupid invisible carriage return
-  // if(dir.startsWith("/"))
-  //   dir.replace("/", "");
-  // if(dir == "")
-  //   dir = "~/";
-  // // Serial.print("INCOMING DIR: "); Serial.println(dir);
-  // // Serial.print("INCOMING FNAME: "); Serial.println(fname);
-  // dirStartIndex = 0xFFFFFFFF;
-  // dirEndIndex = 0; 
-  // dirCurIndex = 0;
-  // manifest.open(MANIFEST_PATH, O_READ);
-  // manifest.seek(0);
-  // manifest.readStringUntil('\n'); //Skip machine generated preamble
-  // for(uint32_t i = 0; i<numberOfFiles; i++)
-  // {
-  //   String cur = manifest.readStringUntil('\n');
-  //   cur.replace(String(i)+":", "");
-  //   if(cur.startsWith(dir))
-  //   {
-  //     if(dirStartIndex == 0xFFFFFFFF)
-  //       dirStartIndex = i;
-  //     if(cur.endsWith(fname)) 
-  //       dirCurIndex = i;
-  //     dirEndIndex = i;
-  //   }
-  //   else if(dirStartIndex != 0xFFFFFFFF)
-  //     break;
-  // }
-  // if(dirStartIndex == 0xFFFFFFFF)
-  //   dirStartIndex = 0;
-
-
-
-
-
   fname += '\r'; //stupid invisible carriage return
   if(dir.startsWith("/"))
     dir.replace("/", "");
@@ -750,11 +721,12 @@ void getDirIndices(String dir, String fname)
   manifest.open(MANIFEST_PATH, O_READ);
   manifest.seek(0);
   manifest.readStringUntil('\n'); //Skip machine generated preamble
+  String cur;
   if(dir == "~/") //Files are on the root
   {
     for(uint32_t i = 0; i<numberOfFiles; i++)
     {
-      String cur = manifest.readStringUntil('\n');
+      cur = manifest.readStringUntil('\n');
       cur.replace(String(i)+":", "");
       if(cur.startsWith(dir))
       {
@@ -774,11 +746,11 @@ void getDirIndices(String dir, String fname)
   {
     for(uint32_t i = 0; i<numberOfFiles; i++)
     {
-      String cur = manifest.readStringUntil('\n');
+      cur = manifest.readStringUntil('\n');
       cur.replace(String(i)+":", "");
       if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
       {
-        String curDir = readStringUntil(cur, '/'); //that's what this check is for, though this might screw up files on the root.
+        String curDir = readStringUntil(cur, '/'); //that's what this check is for
         if(curDir.equals(dir))
         {
           Serial.print("CUR: "); Serial.println(cur);
@@ -951,6 +923,21 @@ uint32_t freeKB()
   uint32_t kb = SD.vol()->freeClusterCount();
   kb *= SD.vol()->blocksPerCluster()/2;
   return kb;
+}
+
+bool VerifyManifest()
+{
+  SD.chdir("/");
+  manifest.open(MANIFEST_PATH, O_READ);
+  if(!manifest)
+    return false;
+  manifest.readStringUntil('\n'); //Skip machine generated preamble
+  for(uint32_t i = 0; i<numberOfFiles; i++)
+  {
+    if(!manifest.readStringUntil('\n').startsWith(String(i)))
+      return false;
+  }
+  return true;
 }
 
 void CreateManifest(bool createNew)
@@ -1254,7 +1241,10 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
 
 result doCreateManifest()
 {
-  CreateManifest(true);
+  do
+  {
+    CreateManifest(true);
+  }while(!VerifyManifest());
   return proceed;
 }
 
