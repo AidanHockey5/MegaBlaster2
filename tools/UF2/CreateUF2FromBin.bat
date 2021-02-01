@@ -1,0 +1,1 @@
+python uf2/utils/uf2conv.py -c -b 0x4000 -o firmware.uf2 firmware.bin
