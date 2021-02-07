@@ -654,11 +654,11 @@ void handleSerialIn()
         startTrack(REQUEST, req);
       }
       break;
-      // case 'x': //Just used for debugging
-      // {
-      //   startTrack(REQUEST, GetPathFromManifest(2040));
-      // }
-      // break;
+      case 'x': //Just used for debugging
+      {
+        u8g2.writeBufferXBM(Serial);
+      }
+      break;
       default:
         continue;
     }
