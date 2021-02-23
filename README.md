@@ -38,6 +38,10 @@ Here are some quick tips for building your own board.
 9) Make sure your SN76489 PSG chip is orientated correctly. On this board, the PSG is upside-down relative to the rest of the board. The Flash IC is also upside-down. This was done for routing purposes. A small star on the silk-screen indicates the pin-1 position of every IC.
 10) For general usage instructions, [please refer to the manual](https://github.com/AidanHockey5/MegaBlaster2/raw/master/man/MegaBlaster2InstructionManual.pdf).
 
+# Reporting Bugs
+
+As you can imagine, this is quite a complex project. There are bound to be bugs to squish, so if you happen to find any, [please report them over on the issues page](https://github.com/AidanHockey5/MegaBlaster2/issues) so I can tkae a look at them! Please try to document the steps it takes to recreate the bug if you happen to know them.
+
 # Schematic
 
 ![Schematic](https://github.com/AidanHockey5/MegaBlaster2/raw/master/schematic/MegaBlaster2.png)
