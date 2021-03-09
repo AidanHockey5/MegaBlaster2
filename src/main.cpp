@@ -159,7 +159,7 @@ TOGGLE(VGMEngine.loopOneOffs, setLoopOneOff, "Loop One-offs: ", doNothing, noEve
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
   ,SUBMENU(modeMenu)
-  ,FIELD(VGMEngine.maxLoops,"Loops: ","",0,255,1,10,doNothing,noEvent,noStyle)
+  ,FIELD(VGMEngine.maxLoops,"Loops: ","",1,255,1,10,doNothing,noEvent,noStyle)
   ,SUBMENU(setLoopOneOff)
   ,OP("Rebuild Manifest",doCreateManifest,enterEvent)
   //,EXIT("<Back")
