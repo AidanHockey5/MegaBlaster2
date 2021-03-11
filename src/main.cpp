@@ -485,7 +485,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
   {
     case FIRST_START:
     {
-      filePath = GetPathFromManifest(0);
+      //filePath = GetPathFromManifest(0);
     }
     break;
     case NEXT:
@@ -501,6 +501,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
         uint32_t rng;
+        bool hasRootFile = false;
         if(randIndex == randFileList.size()-1 || randFileList.size() == 0) //End of random list, generate new random track and add to list
         {
           char dirName[MAX_FILE_NAME_SIZE];
@@ -514,20 +515,58 @@ bool startTrack(FileStrategy fileStrategy, String request)
               uint32_t rngDir = random(0, rootObjectCount+1);
               
               SD.vwd()->rewind();
-              for(uint32_t i = 0; i<rngDir; i++)
+              if(rngDir != 0) //0 means the root dir was rolled
               {
-                tmp.close();
-                tmp.openNext(SD.vwd(), O_READ);
+                for(uint32_t i = 0; i<rngDir; i++)
+                {
+                  tmp.close();
+                  tmp.openNext(SD.vwd(), O_READ);
+                }
               }
-            } while (!VerifyDirectory(tmp));
-            tmp.getName(dirName, MAX_FILE_NAME_SIZE);
-            tmp.close();
-            dirEndIndex = countFilesInDir(String(dirName))-1;
-            SD.chdir(dirName);
+              else
+              {
+                Serial.println("!!!!!!ROLLED ROOT!");
+                for(uint32_t i = 0; i<rootObjectCount; i++) //If you selected the root, keep going through files until you find one that isn't a directory. 
+                {                                                  //If you go through the entire root and find no files, simply randomly pick a new directory in the next loop.
+                  tmp.close();
+                  tmp.openNext(SD.vwd(), O_READ);
+                  char fnametmp[128];
+                  tmp.getName(fnametmp, 128);
+                  Serial.println(fnametmp);
+                  if(!tmp.isDirectory()) //You've found a file on the root directory, get out of the loop
+                  {
+                    if(VGMEngine.header.read(&tmp)) //Verify the header to see if it's a VGM file
+                    {
+                      tmp.seekSet(0);
+                      hasRootFile = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            } while (!VerifyDirectory(tmp) && !hasRootFile);
+            
+            if(hasRootFile) //Did you find a file on the root or did you find a directory
+            {
+              file = tmp;
+              tmp.close();
+              dirEndIndex = countFilesInDir("/")-1;
+              SD.chdir("/");
+              memset(dirName, 0, MAX_FILE_NAME_SIZE);
+              dirName[0] = '/';
+            }
+            else
+            {
+              tmp.getName(dirName, MAX_FILE_NAME_SIZE);
+              tmp.close();
+              dirEndIndex = countFilesInDir(String(dirName))-1;
+              SD.chdir(dirName);
+            }
           }
           rng = random(dirStartIndex, dirEndIndex+1);
           randFileList.add(rng);
           SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
+          Serial.print("ADDED DIR: "); Serial.println(dirName);
           randDirList.add(String(dirName));
           randIndex = randFileList.size()-1;
           file = getFileFromVwdIndex(rng);
@@ -538,7 +577,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randIndex++;
           dirCurIndex = randFileList.get(randIndex);
           SD.chdir("/");
-          SD.chdir(randDirList.get(randIndex));
+          SD.chdir(randDirList.get(randIndex).c_str());
           Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
           file = getFileFromVwdIndex(dirCurIndex);
           //filePath = GetPathFromManifest(randFileList.get(randIndex));
@@ -564,8 +603,11 @@ bool startTrack(FileStrategy fileStrategy, String request)
         }
         dirCurIndex = randFileList.get(randIndex);
         SD.chdir("/");
-        SD.chdir(randDirList.get(randIndex));
+        SD.chdir(randDirList.get(randIndex).c_str());
         Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
+        char dirName[MAX_FILE_NAME_SIZE];
+        SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
+        Serial.print("CURRENT DIR: "); Serial.println(dirName);
         file = getFileFromVwdIndex(dirCurIndex);
       }
     }
@@ -603,7 +645,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
   }
 
-  Serial.print("dirCurIndex"); Serial.println(dirCurIndex);
+  Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
 
   if(!file)
   {
