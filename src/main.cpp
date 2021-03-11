@@ -58,6 +58,7 @@ void drawOLEDTrackInfo();
 bool startTrack(FileStrategy fileStrategy, String request = "");
 bool vgmVerify();
 void showIndexProgressOLED();
+void findTracksOnRoot();
 uint8_t VgmCommandLength(uint8_t Command);
 uint32_t countFilesInDir(String dir); 
 uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
@@ -100,6 +101,7 @@ uint32_t currentDirDirCount = 0; //How many directories are IN the current direc
 uint32_t rootObjectCount = 0; //How many objects (files and folders) are in the root directory
 
 uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifest file where the current files in the current dir are
+LinkedList<int> rootTrackIndicies = LinkedList<int>(); //Valid VGM/VGZ file indicies on the root are stored here
 LinkedList<int> randFileList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 LinkedList<String> randDirList = LinkedList<String>();
 int randIndex = 0; 
@@ -343,6 +345,7 @@ void setup()
   //Prepare files
   removeMeta();
   rootObjectCount = countFilesInDir("/");
+  findTracksOnRoot();
   bool manifestError = false;
   do
   {
@@ -444,6 +447,34 @@ void drawOLEDTrackInfo()
   u8g2.setFont(fontName);
 }
 
+void findTracksOnRoot()
+{
+  SD.chdir("/");
+  File tmp;
+  for(uint32_t i = 0; i<rootObjectCount; i++)
+  {
+    tmp.close();
+    tmp.openNext(SD.vwd(), O_READ);
+    if(!tmp.isDirectory())
+    {
+      if(VGMEngine.header.read(&tmp))
+      {
+        rootTrackIndicies.add(i);
+      }
+      else
+      {
+        uint16_t gzipmagic = 0;
+        tmp.seekSet(0);
+        tmp.read(&gzipmagic, 2);
+        if(gzipmagic == 0x8B1F) //File header starts with gzip magic number
+          rootTrackIndicies.add(i);
+      }
+    }
+  }
+  tmp.close();
+  Serial.print("size of root tracks: "); Serial.println(rootTrackIndicies.size());
+}
+
 File getFileFromVwdIndex(uint32_t index)
 {
   SD.vwd()->rewind();
@@ -500,77 +531,149 @@ bool startTrack(FileStrategy fileStrategy, String request)
       }
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
-        uint32_t rng;
-        bool hasRootFile = false;
+        bool hasDir = false;
         if(randIndex == randFileList.size()-1 || randFileList.size() == 0) //End of random list, generate new random track and add to list
         {
+          //Pick the directory first
           char dirName[MAX_FILE_NAME_SIZE];
-          //uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
-          if(playMode == SHUFFLE_ALL) //Pick a random dir first, then pick a file
+          if(playMode == SHUFFLE_DIR)
           {
-            SD.chdir("/"); //Go to root
+            SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Get the current dir name and add it to the random dir list for history seeking
+            randDirList.add(String(dirName));
+          }
+          else if(playMode == SHUFFLE_ALL)
+          {
             File tmp;
             do
             {
-              uint32_t rngDir = random(0, rootObjectCount+1);
-              
-              SD.vwd()->rewind();
-              if(rngDir != 0) //0 means the root dir was rolled
+              SD.chdir("/");
+              memset(dirName, 0, MAX_FILE_NAME_SIZE);
+              uint32_t rngDir = random(0, rootObjectCount+2); //+2 is used for picking the root. random() is exclusive on the max side, so if the roll is rootObjectCount+1, it would otherwise be out-of-bounds, but we will use it to represent a root roll
+              if(rngDir == rootObjectCount+1) //+1, not +2 here. Remember, random is exclusive on the max side. If this statement is true, we have just rolled the root dir
               {
+                SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Current dir name right now would be root ("/").
+                randDirList.add(String(dirName));
+                hasDir = true;
+                Serial.println("PICKED ROOT");
+              }
+              else //Otherwise, start scrolling through the entries to see if your pick is a directory
+              {
+                Serial.print("Picked DIR at INDEX: "); Serial.println(rngDir);
                 for(uint32_t i = 0; i<rngDir; i++)
                 {
                   tmp.close();
                   tmp.openNext(SD.vwd(), O_READ);
                 }
-              }
-              else
-              {
-                Serial.println("!!!!!!ROLLED ROOT!");
-                for(uint32_t i = 0; i<rootObjectCount; i++) //If you selected the root, keep going through files until you find one that isn't a directory. 
-                {                                                  //If you go through the entire root and find no files, simply randomly pick a new directory in the next loop.
-                  tmp.close();
-                  tmp.openNext(SD.vwd(), O_READ);
-                  char fnametmp[128];
-                  tmp.getName(fnametmp, 128);
-                  Serial.println(fnametmp);
-                  if(!tmp.isDirectory()) //You've found a file on the root directory, get out of the loop
-                  {
-                    if(VGMEngine.header.read(&tmp)) //Verify the header to see if it's a VGM file
-                    {
-                      tmp.seekSet(0);
-                      hasRootFile = true;
-                      break;
-                    }
-                  }
+                tmp.getName(dirName, MAX_FILE_NAME_SIZE);
+                Serial.print("DIR NAME: "); Serial.println(dirName);
+                if(VerifyDirectory(tmp))
+                {
+                  tmp.getName(dirName, MAX_FILE_NAME_SIZE);
+                  randDirList.add(String(dirName));
+                  hasDir = true;
                 }
               }
-            } while (!VerifyDirectory(tmp) && !hasRootFile);
+              tmp.close();
+            } while (!hasDir);
             
-            if(hasRootFile) //Did you find a file on the root or did you find a directory
+            if(String(dirName) == "/") //Dir is root. Pick from the pre-defiend list of valid VGM files
             {
-              file = tmp;
-              tmp.close();
-              dirEndIndex = countFilesInDir("/")-1;
+              Serial.println("Dir is root");
               SD.chdir("/");
-              memset(dirName, 0, MAX_FILE_NAME_SIZE);
-              dirName[0] = '/';
+              uint32_t rngFile = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
+              randFileList.add(rngFile);
+              dirCurIndex = rngFile;
             }
-            else
+            else //Dir is not root. Count how many files are in your selected dir, then pick a random one
             {
-              tmp.getName(dirName, MAX_FILE_NAME_SIZE);
-              tmp.close();
-              dirEndIndex = countFilesInDir(String(dirName))-1;
-              SD.chdir(dirName);
+              uint32_t fcount = countFilesInDir("/"+String(dirName));
+              SD.chdir(("/"+String(dirName)).c_str());
+              Serial.print("fcount: ");Serial.println(fcount);
+              uint32_t rng = random(0, fcount);
+              randFileList.add(rng);
+              dirCurIndex = rng;
             }
           }
-          rng = random(dirStartIndex, dirEndIndex+1);
-          randFileList.add(rng);
-          SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
-          Serial.print("ADDED DIR: "); Serial.println(dirName);
-          randDirList.add(String(dirName));
           randIndex = randFileList.size()-1;
-          file = getFileFromVwdIndex(rng);
-          dirCurIndex = rng;
+          file = getFileFromVwdIndex(dirCurIndex);
+          //uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
+        //   if(playMode == SHUFFLE_ALL) //Pick a random dir first, then pick a file
+        //   {
+        //     SD.chdir("/"); //Go to root
+        //     File tmp;
+        //     do
+        //     {
+        //       uint32_t rngDir = random(0, rootObjectCount+1);
+              
+        //       SD.vwd()->rewind();
+        //       if(rngDir != 0) //0 means the root dir was rolled
+        //       {
+        //         for(uint32_t i = 0; i<rngDir; i++)
+        //         {
+        //           tmp.close();
+        //           tmp.openNext(SD.vwd(), O_READ);
+        //         }
+        //       }
+        //       else
+        //       {
+        //         Serial.println("!!!!!!ROLLED ROOT!");
+        //         rng = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
+
+
+        //         // for(uint32_t i = 0; i<rootObjectCount; i++) //If you selected the root, keep going through files until you find one that isn't a directory. 
+        //         // {                                                  //If you go through the entire root and find no files, simply randomly pick a new directory in the next loop.
+        //         //   tmp.close();
+        //         //   tmp.openNext(SD.vwd(), O_READ);
+        //         //   char fnametmp[128];
+        //         //   tmp.getName(fnametmp, 128);
+        //         //   Serial.println(fnametmp);
+        //         //   if(!tmp.isDirectory()) //You've found a file on the root directory, get out of the loop
+        //         //   {
+        //         //     if(VGMEngine.header.read(&tmp)) //Verify the header to see if it's a VGM file
+        //         //     {
+        //         //       tmp.seekSet(0);
+        //         //       hasRootFile = true;
+        //         //       randFileList.add(i);
+        //         //       dirCurIndex = i;
+        //         //       break;
+        //         //     }
+        //         //   }
+        //         // }
+        //       }
+        //     } while (!VerifyDirectory(tmp) && !hasRootFile);
+            
+        //     if(hasRootFile) //Did you find a file on the root or did you find a directory
+        //     {
+        //       file = tmp;
+        //       tmp.close();
+        //       dirEndIndex = countFilesInDir("/")-1;
+        //       SD.chdir("/");
+        //       memset(dirName, 0, MAX_FILE_NAME_SIZE);
+        //       dirName[0] = '/';
+        //     }
+        //     else
+        //     {
+        //       tmp.getName(dirName, MAX_FILE_NAME_SIZE);
+        //       tmp.close();
+        //       dirEndIndex = countFilesInDir(String(dirName))-1;
+        //       SD.chdir(dirName);
+        //       rng = random(dirStartIndex, dirEndIndex+1);
+        //       randFileList.add(rng);
+        //       file = getFileFromVwdIndex(rng);
+        //       dirCurIndex = rng;
+        //     }
+        //   }
+        //   else if(playMode == SHUFFLE_DIR)
+        //   {
+
+        //   }
+
+        //   SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
+        //   Serial.print("ADDED DIR: "); Serial.println(dirName);
+        //   randDirList.add(String(dirName));
+        //   randIndex = randFileList.size()-1;
+
+        // }
         }
         else //Otherwise, move up in history
         {
