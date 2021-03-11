@@ -84,7 +84,7 @@ const uint32_t MANIFEST_MAGIC = 0x12345678;
 #define MANIFEST_FILE_NAME ".MANIFEST"
 #define MANIFEST_DIR "_SYS/"
 #define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
-#define TMP_DECOMPRESSION_FILE_PATH MANIFEST_DIR "/TMP.vgm"
+#define TMP_DECOMPRESSION_FILE_PATH "/" MANIFEST_DIR "/TMP.vgm"
 
 //SD & File Streaming
 SdFat SD;
@@ -511,7 +511,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
             File tmp;
             do
             {
-              uint32_t rngDir = random(0, rootObjectCount);
+              uint32_t rngDir = random(0, rootObjectCount+1);
               
               SD.vwd()->rewind();
               for(uint32_t i = 0; i<rngDir; i++)
@@ -529,7 +529,6 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randFileList.add(rng);
           SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
           randDirList.add(String(dirName));
-          Serial.print("DIR NAME: "); Serial.println(dirName);
           randIndex = randFileList.size()-1;
           file = getFileFromVwdIndex(rng);
           dirCurIndex = rng;
@@ -538,8 +537,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
         {
           randIndex++;
           dirCurIndex = randFileList.get(randIndex);
-          file = getFileFromVwdIndex(dirCurIndex);
+          SD.chdir("/");
           SD.chdir(randDirList.get(randIndex));
+          Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
+          file = getFileFromVwdIndex(dirCurIndex);
           //filePath = GetPathFromManifest(randFileList.get(randIndex));
         }
       }
@@ -562,8 +563,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randIndex--;
         }
         dirCurIndex = randFileList.get(randIndex);
+        SD.chdir("/");
+        SD.chdir(randDirList.get(randIndex));
+        Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
         file = getFileFromVwdIndex(dirCurIndex);
-        
       }
     }
     break;
@@ -621,7 +624,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
       u8g2.setDrawColor(1);
       u8g2.sendBuffer();
       //Serial.println("Found GZIP magic...");
-      const char* inName = filePath.c_str();
+      char inName[MAX_FILE_NAME_SIZE]; 
+      file.getName(inName, MAX_FILE_NAME_SIZE);
       //SD.remove(outName);
       //file.getName(inName, MAX_FILE_NAME_SIZE);
       file.close();
