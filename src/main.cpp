@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.0"
+#define FIRMWARE_VERSION "1.1"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -97,10 +97,13 @@ String currentDir = "";
 uint32_t currentDirFileCount = 0;
 uint32_t currentDirFileIndex = 0;
 uint32_t currentDirDirCount = 0; //How many directories are IN the current directory, mainly used for root only.
+uint32_t rootObjectCount = 0; //How many objects (files and folders) are in the root directory
 
 uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifest file where the current files in the current dir are
-LinkedList<int> randList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
+LinkedList<int> randFileList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
+LinkedList<String> randDirList = LinkedList<String>();
 int randIndex = 0; 
+#define MAX_RAND_HISTORY_SIZE 25
 
 Adafruit_ZeroTimer timer1 = Adafruit_ZeroTimer(3);
 Adafruit_ZeroTimer timer2 = Adafruit_ZeroTimer(4);
@@ -339,6 +342,7 @@ void setup()
 
   //Prepare files
   removeMeta();
+  rootObjectCount = countFilesInDir("/");
   bool manifestError = false;
   do
   {
@@ -440,6 +444,31 @@ void drawOLEDTrackInfo()
   u8g2.setFont(fontName);
 }
 
+File getFileFromVwdIndex(uint32_t index)
+{
+  SD.vwd()->rewind();
+  File tmp;
+  for(uint32_t i = 0; i<index+1; i++)
+  {
+    tmp.close();
+    tmp.openNext(SD.vwd(), O_READ);
+  }
+  return tmp;
+}
+
+bool VerifyDirectory(File f)
+{
+  if(!f.isDirectory()) //First, check to see if this object even is a directory in the first place
+    return false;
+  char tmpName[MAX_FILE_NAME_SIZE];
+  f.getName(tmpName, MAX_FILE_NAME_SIZE);
+  if((String(tmpName)+"/").startsWith(MANIFEST_DIR)) //Ignore the system dir
+    return false;
+  if(countFilesInDir(String(tmpName)) == 0) //Then, check to see if anything is even in the directory
+    return false;
+  return true;
+}
+
 //Mount file and prepare for playback. Returns true if file is found.
 bool startTrack(FileStrategy fileStrategy, String request)
 {
@@ -467,23 +496,52 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex++;
         else
           dirCurIndex = dirStartIndex;
-        filePath = GetPathFromManifest(dirCurIndex);
+        file = getFileFromVwdIndex(dirCurIndex);
       }
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
-        if(randIndex == randList.size()-1 || randList.size() == 0) //End of random list, generate new random track and add to list
+        uint32_t rng;
+        if(randIndex == randFileList.size()-1 || randFileList.size() == 0) //End of random list, generate new random track and add to list
         {
-          uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
-          randList.add(rng);
-          randIndex = randList.size()-1;
-          filePath = GetPathFromManifest(rng);
+          char dirName[MAX_FILE_NAME_SIZE];
+          //uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
+          if(playMode == SHUFFLE_ALL) //Pick a random dir first, then pick a file
+          {
+            SD.chdir("/"); //Go to root
+            File tmp;
+            do
+            {
+              uint32_t rngDir = random(0, rootObjectCount);
+              
+              SD.vwd()->rewind();
+              for(uint32_t i = 0; i<rngDir; i++)
+              {
+                tmp.close();
+                tmp.openNext(SD.vwd(), O_READ);
+              }
+            } while (!VerifyDirectory(tmp));
+            tmp.getName(dirName, MAX_FILE_NAME_SIZE);
+            tmp.close();
+            dirEndIndex = countFilesInDir(String(dirName))-1;
+            SD.chdir(dirName);
+          }
+          rng = random(dirStartIndex, dirEndIndex+1);
+          randFileList.add(rng);
+          SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
+          randDirList.add(String(dirName));
+          Serial.print("DIR NAME: "); Serial.println(dirName);
+          randIndex = randFileList.size()-1;
+          file = getFileFromVwdIndex(rng);
+          dirCurIndex = rng;
         }
         else //Otherwise, move up in history
         {
           randIndex++;
-          filePath = GetPathFromManifest(randList.get(randIndex));
+          dirCurIndex = randFileList.get(randIndex);
+          file = getFileFromVwdIndex(dirCurIndex);
+          SD.chdir(randDirList.get(randIndex));
+          //filePath = GetPathFromManifest(randFileList.get(randIndex));
         }
-        dirCurIndex = randIndex;
       }
     }
     break;
@@ -495,7 +553,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex--;
         else
           dirCurIndex = dirEndIndex;
-        filePath = GetPathFromManifest(dirCurIndex);
+        file = getFileFromVwdIndex(dirCurIndex);
       }
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
@@ -503,8 +561,9 @@ bool startTrack(FileStrategy fileStrategy, String request)
         {
           randIndex--;
         }
-        filePath = GetPathFromManifest(randList.get(randIndex));
-        dirCurIndex = randIndex;
+        dirCurIndex = randFileList.get(randIndex);
+        file = getFileFromVwdIndex(dirCurIndex);
+        
       }
     }
     break;
@@ -513,8 +572,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
       playMode = SHUFFLE_ALL; 
       mainMenu[2].enable(); //Reenable loop # control
       uint32_t rng = random(numberOfFiles-1);
-      randList.add(rng);
-      randIndex = randList.size() == 0 ? 0 : randList.size()-1;
+      randFileList.add(rng);
+      randIndex = randFileList.size() == 0 ? 0 : randFileList.size()-1;
       filePath = GetPathFromManifest(rng);
       dirCurIndex = rng;
     }
@@ -526,6 +585,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
       {
         file.close();
         filePath = request;
+        filePath.trim();
+        strncpy(fileName, filePath.c_str(), MAX_FILE_NAME_SIZE);
+
+        file = SD.open(filePath.c_str(), FILE_READ);
         Serial.println("File found!");
       }
       else
@@ -537,11 +600,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
   }
 
-  filePath.trim();
-  strncpy(fileName, filePath.c_str(), MAX_FILE_NAME_SIZE);
-  if(SD.exists(filePath.c_str()))
-    file.close();
-  file = SD.open(filePath.c_str(), FILE_READ);
+  Serial.print("dirCurIndex"); Serial.println(dirCurIndex);
+
   if(!file)
   {
     Serial.println("Failed to read file");
@@ -674,7 +734,7 @@ void handleSerialIn()
 
 void clearRandomHistory()
 {
-  randList.clear();
+  randFileList.clear();
   randIndex = 0;
 }
 
@@ -713,73 +773,96 @@ uint32_t countFilesInDir(String dir)
 
 void getDirIndices(String dir, String fname)
 {
-  fname += '\r'; //stupid invisible carriage return
-  if(dir.startsWith("/"))
-    dir.replace("/", "");
-  if(dir == "")
-    dir = "~/";
+  //fname += '\r'; //stupid invisible carriage return
+  // if(dir.startsWith("/"))
+  //   dir.replace("/", "");
+  // if(dir == "")
+  //   dir = "/";
   // Serial.print("INCOMING DIR: "); Serial.println(dir);
   // Serial.print("INCOMING FNAME: "); Serial.println(fname);
-  dirStartIndex = 0xFFFFFFFF;
-  dirEndIndex = 0; 
+  dirStartIndex = 0;
+  dirEndIndex = countFilesInDir(dir)-1; 
   dirCurIndex = 0;
-  manifest.open(MANIFEST_PATH, O_READ);
-  manifest.seek(0);
-  manifest.readStringUntil('\n'); //Skip machine generated preamble
-  String cur;
-  if(dir == "~/") //Files are on the root
+
+  SD.chdir(dir.c_str());
+  File tmp;
+
+  if(fname != "")
   {
-    for(uint32_t i = 0; i<numberOfFiles; i++)
+    for(uint32_t i = 0; i<dirEndIndex; i++)
     {
-      cur = manifest.readStringUntil('\n');
-      cur.replace(String(i)+":", "");
-      if(cur.startsWith(dir))
+      tmp.openNext(SD.vwd(), O_READ);
+      char tmpName[MAX_FILE_NAME_SIZE];
+      tmp.getName(tmpName, MAX_FILE_NAME_SIZE);
+      Serial.println(tmpName);
+      if(strncmp(fname.c_str(), tmpName, sizeof(fname.c_str())) == 0)
       {
-        if(dirStartIndex == 0xFFFFFFFF)
-          dirStartIndex = i;
-        if(cur.endsWith(fname)) 
-          dirCurIndex = i;
-        dirEndIndex = i;
+        dirCurIndex = i;
       }
-      else if(dirStartIndex != 0xFFFFFFFF)
-        break;
+      tmp.close();
     }
-    if(dirStartIndex == 0xFFFFFFFF)
-      dirStartIndex = 0;
   }
-  else  //Files are in a dir
-  {
-    for(uint32_t i = 0; i<numberOfFiles; i++)
-    {
-      cur = manifest.readStringUntil('\n');
-      cur.replace(String(i)+":", "");
-      if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
-      {
-        String curDir = readStringUntil(cur, '/'); //that's what this check is for
-        if(curDir.equals(dir))
-        {
-          Serial.print("CUR: "); Serial.println(cur);
-          Serial.print("DIR: "); Serial.println(dir);
-          Serial.print("CURDIR: "); Serial.println(curDir);
-          Serial.print("FNAME: "); Serial.println(fname);
-          if(dirStartIndex == 0xFFFFFFFF)
-            dirStartIndex = i;
-          if(cur.endsWith(fname)) 
-            dirCurIndex = i;
-          dirEndIndex = i;
-          //break;
-        }
-      }
-      else if(dirStartIndex != 0xFFFFFFFF)
-        break;
-    }
-    if(dirStartIndex == 0xFFFFFFFF)
-      dirStartIndex = 0;
-  }
+    Serial.print("DIR: "); Serial.println(dir);
+    Serial.print("FNAME: "); Serial.println(fname);
+    Serial.print("dirStartIndex: "); Serial.println(dirStartIndex);
+    Serial.print("dirEndIndex: "); Serial.println(dirEndIndex);
+    Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
+
+
+  // manifest.open(MANIFEST_PATH, O_READ);
+  // manifest.seek(0);
+  // manifest.readStringUntil('\n'); //Skip machine generated preamble
+  // String cur;
+  // if(dir == "~/") //Files are on the root
+  // {
+  //   for(uint32_t i = 0; i<numberOfFiles; i++)
+  //   {
+  //     cur = manifest.readStringUntil('\n');
+  //     cur.replace(String(i)+":", "");
+  //     if(cur.startsWith(dir))
+  //     {
+  //       if(dirStartIndex == 0xFFFFFFFF)
+  //         dirStartIndex = i;
+  //       if(cur.endsWith(fname)) 
+  //         dirCurIndex = i;
+  //       dirEndIndex = i;
+  //     }
+  //     else if(dirStartIndex != 0xFFFFFFFF)
+  //       break;
+  //   }
+  //   if(dirStartIndex == 0xFFFFFFFF)
+  //     dirStartIndex = 0;
+  // }
+  // else  //Files are in a dir
+  // {
+  //   for(uint32_t i = 0; i<numberOfFiles; i++)
+  //   {
+  //     cur = manifest.readStringUntil('\n');
+  //     cur.replace(String(i)+":", "");
+  //     if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
+  //     {
+  //       String curDir = readStringUntil(cur, '/'); //that's what this check is for
+  //       if(curDir.equals(dir))
+  //       {
+  //         Serial.print("CUR: "); Serial.println(cur);
+  //         Serial.print("DIR: "); Serial.println(dir);
+  //         Serial.print("CURDIR: "); Serial.println(curDir);
+  //         Serial.print("FNAME: "); Serial.println(fname);
+  //         if(dirStartIndex == 0xFFFFFFFF)
+  //           dirStartIndex = i;
+  //         if(cur.endsWith(fname)) 
+  //           dirCurIndex = i;
+  //         dirEndIndex = i;
+  //         //break;
+  //       }
+  //     }
+  //     else if(dirStartIndex != 0xFFFFFFFF)
+  //       break;
+  //   }
+  //   if(dirStartIndex == 0xFFFFFFFF)
+  //     dirStartIndex = 0;
+  //}
   
-  // // Serial.print("START: "); Serial.println(dirStartIndex);
-  // // Serial.print("CURRENT: "); Serial.println(dirCurIndex);
-  // // Serial.print("END: "); Serial.println(dirEndIndex);
 }
 
 bool contains(String & in, char find)
@@ -1233,11 +1316,11 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
         getDirIndices(filePickMenu.selectedFolder, filePickMenu.selectedFile);
         if(playMode == SHUFFLE_DIR || playMode == SHUFFLE_ALL)
         {
-          if(randList.size() == 0)
+          if(randFileList.size() == 0)
             randIndex = 0;
           else
             randIndex++;
-          randList.add(dirCurIndex);
+          randFileList.add(dirCurIndex);
         }
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
@@ -1294,7 +1377,7 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
       menuState = IN_VGM;
       nav.timeOut=0xFFFFFFFF;
       clearRandomHistory();
-      startTrack(RND);
+      startTrack(NEXT);
       drawOLEDTrackInfo();
       break;
       case PlayMode::IN_ORDER:
