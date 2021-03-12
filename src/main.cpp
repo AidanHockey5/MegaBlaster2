@@ -346,12 +346,12 @@ void setup()
   removeMeta();
   rootObjectCount = countFilesInDir("/");
   findTracksOnRoot();
-  bool manifestError = false;
-  do
-  {
-    CreateManifest(manifestError);
-    manifestError = !VerifyManifest();
-  }while(manifestError);
+  // bool manifestError = false;
+  // do
+  // {
+  //   CreateManifest(manifestError);
+  //   manifestError = !VerifyManifest();
+  // }while(manifestError);
 
   nav.timeOut=0xFFFFFFFF; //This might be a slight issue if you decide to run your player for 50,000 days straight :/
   nav.idleTask = onMenuIdle;
@@ -536,10 +536,14 @@ bool startTrack(FileStrategy fileStrategy, String request)
         {
           //Pick the directory first
           char dirName[MAX_FILE_NAME_SIZE];
+          memset(dirName, 0, MAX_FILE_NAME_SIZE);
           if(playMode == SHUFFLE_DIR)
           {
-            SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Get the current dir name and add it to the random dir list for history seeking
-            randDirList.add(String(dirName));
+            
+            // SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Get the current dir name and add it to the random dir list for history seeking
+            // Serial.print("Dir Name SHUFFLE_DIR: "); Serial.println(dirName);
+            strcpy(dirName, currentDir.c_str());
+            randDirList.add(currentDir);
           }
           else if(playMode == SHUFFLE_ALL)
           {
@@ -575,24 +579,25 @@ bool startTrack(FileStrategy fileStrategy, String request)
               }
               tmp.close();
             } while (!hasDir);
-            
-            if(String(dirName) == "/") //Dir is root. Pick from the pre-defiend list of valid VGM files
-            {
-              Serial.println("Dir is root");
-              SD.chdir("/");
-              uint32_t rngFile = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
-              randFileList.add(rngFile);
-              dirCurIndex = rngFile;
-            }
-            else //Dir is not root. Count how many files are in your selected dir, then pick a random one
-            {
-              uint32_t fcount = countFilesInDir("/"+String(dirName));
-              SD.chdir(("/"+String(dirName)).c_str());
-              Serial.print("fcount: ");Serial.println(fcount);
-              uint32_t rng = random(0, fcount);
-              randFileList.add(rng);
-              dirCurIndex = rng;
-            }
+          }
+          if(String(dirName) == "/") //Dir is root. Pick from the pre-defiend list of valid VGM files
+          {
+            Serial.println("Dir is root");
+            SD.chdir("/");
+            uint32_t rngFile = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
+            randFileList.add(rngFile);
+            dirCurIndex = rngFile;
+            currentDir = "/";
+          }
+          else //Dir is not root. Count how many files are in your selected dir, then pick a random one
+          {
+            uint32_t fcount = countFilesInDir("/"+String(dirName));
+            SD.chdir(("/"+String(dirName)).c_str());
+            Serial.print("fcount: ");Serial.println(fcount);
+            uint32_t rng = random(0, fcount);
+            randFileList.add(rng);
+            dirCurIndex = rng;
+            currentDir = String(dirName);
           }
           randIndex = randFileList.size()-1;
           file = getFileFromVwdIndex(dirCurIndex);
@@ -706,7 +711,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
         }
         dirCurIndex = randFileList.get(randIndex);
         SD.chdir("/");
-        SD.chdir(randDirList.get(randIndex).c_str());
+        SD.chdir(("/"+randDirList.get(randIndex)).c_str());
         Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
         char dirName[MAX_FILE_NAME_SIZE];
         SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
@@ -717,13 +722,13 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
     case RND:
     { //This request will disrupt the random history and immediatly create a new node at the end of the random history list
-      playMode = SHUFFLE_ALL; 
-      mainMenu[2].enable(); //Reenable loop # control
-      uint32_t rng = random(numberOfFiles-1);
-      randFileList.add(rng);
-      randIndex = randFileList.size() == 0 ? 0 : randFileList.size()-1;
-      filePath = GetPathFromManifest(rng);
-      dirCurIndex = rng;
+      // playMode = SHUFFLE_ALL; 
+      // mainMenu[2].enable(); //Reenable loop # control
+      // uint32_t rng = random(numberOfFiles-1);
+      // randFileList.add(rng);
+      // randIndex = randFileList.size() == 0 ? 0 : randFileList.size()-1;
+      // filePath = GetPathFromManifest(rng);
+      // dirCurIndex = rng;
     }
     break;
     case REQUEST:
@@ -884,6 +889,7 @@ void handleSerialIn()
 void clearRandomHistory()
 {
   randFileList.clear();
+  randDirList.clear();
   randIndex = 0;
 }
 
@@ -1532,13 +1538,13 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
       case PlayMode::IN_ORDER:
       VGMEngine.maxLoops = 3;
       mainMenu[2].enable();
-      getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
+      //getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::SHUFFLE_DIR:
       VGMEngine.maxLoops = 3;
       mainMenu[2].enable();
       clearRandomHistory();
-      getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
+      //getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::PAUSE:
       break;
