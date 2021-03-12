@@ -105,7 +105,7 @@ LinkedList<int> rootTrackIndicies = LinkedList<int>(); //Valid VGM/VGZ file indi
 LinkedList<int> randFileList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 LinkedList<String> randDirList = LinkedList<String>();
 int randIndex = 0; 
-#define MAX_RAND_HISTORY_SIZE 25
+#define MAX_RAND_HISTORY_SIZE 5
 
 Adafruit_ZeroTimer timer1 = Adafruit_ZeroTimer(3);
 Adafruit_ZeroTimer timer2 = Adafruit_ZeroTimer(4);
@@ -523,17 +523,26 @@ bool startTrack(FileStrategy fileStrategy, String request)
     {
       if(playMode == IN_ORDER)
       {
-        if(dirCurIndex != dirEndIndex)
-          dirCurIndex++;
-        else
-          dirCurIndex = dirStartIndex;
-        file = getFileFromVwdIndex(dirCurIndex);
+        do //Keep searching through entries until you find a file. This skips dirs. Mostly needed for root. 
+        {
+          if(dirCurIndex != dirEndIndex)
+            dirCurIndex++;
+          else
+            dirCurIndex = dirStartIndex;
+          file = getFileFromVwdIndex(dirCurIndex);
+        }
+        while(file.isDir());
       }
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
         bool hasDir = false;
         if(randIndex == randFileList.size()-1 || randFileList.size() == 0) //End of random list, generate new random track and add to list
         {
+          if(randFileList.size() >= MAX_RAND_HISTORY_SIZE) //History at max size, remove oldest elements
+          {
+            randFileList.shift();
+            randDirList.shift();
+          }
           //Pick the directory first
           char dirName[MAX_FILE_NAME_SIZE];
           memset(dirName, 0, MAX_FILE_NAME_SIZE);
@@ -697,11 +706,15 @@ bool startTrack(FileStrategy fileStrategy, String request)
     {
       if(playMode == IN_ORDER)
       {
-        if(dirCurIndex != dirStartIndex)
-          dirCurIndex--;
-        else
-          dirCurIndex = dirEndIndex;
-        file = getFileFromVwdIndex(dirCurIndex);
+        do //Keep searching through entries until you find a file. This skips dirs. Mostly needed for root
+        {
+          if(dirCurIndex != dirStartIndex)
+            dirCurIndex--;
+          else
+            dirCurIndex = dirEndIndex;
+          file = getFileFromVwdIndex(dirCurIndex);
+        }
+        while(file.isDir());
       }
       else if(playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
       {
@@ -897,6 +910,7 @@ void clearRandomHistory()
 uint32_t countFilesInDir(String dir) 
 {
   SD.chdir(dir.c_str());
+  removeMeta();
   File countFile;
   uint32_t count = 0;
   currentDirDirCount = 0;
@@ -957,11 +971,11 @@ void getDirIndices(String dir, String fname)
       tmp.close();
     }
   }
-    Serial.print("DIR: "); Serial.println(dir);
-    Serial.print("FNAME: "); Serial.println(fname);
-    Serial.print("dirStartIndex: "); Serial.println(dirStartIndex);
-    Serial.print("dirEndIndex: "); Serial.println(dirEndIndex);
-    Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
+    // Serial.print("DIR: "); Serial.println(dir);
+    // Serial.print("FNAME: "); Serial.println(fname);
+    // Serial.print("dirStartIndex: "); Serial.println(dirStartIndex);
+    // Serial.print("dirEndIndex: "); Serial.println(dirEndIndex);
+    // Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
 
 
   // manifest.open(MANIFEST_PATH, O_READ);
