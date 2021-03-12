@@ -64,15 +64,11 @@ uint32_t countFilesInDir(String dir);
 uint32_t getFileIndexInDir(String dir, String fname, uint32_t dirSize = 0);
 String getFilePathFromCurrentDirFileIndex();
 uint32_t readFile32(FatFile *f);
-String GetPathFromManifest(uint32_t index);
 String readStringUntil(String & in, char terminator);
 void getDirIndices(String dir, String fname);
 void getDirIndicesFromFullPath(String fullPath);
 uint32_t freeKB();
-void CreateManifest(bool createNew = false);
-bool VerifyManifest();
 result filePick(eventMask event, navNode& _nav, prompt &item);
-result doCreateManifest(); //Required for UI
 result onMenuIdle(menuOut& o, idleEvent e);
 result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item);
 void removeMeta();
@@ -81,15 +77,15 @@ void IRQ_ISR();
 void IRQSelfTest();
 void alertErrorState();
 
-const uint32_t MANIFEST_MAGIC = 0x12345678;
-#define MANIFEST_FILE_NAME ".MANIFEST"
-#define MANIFEST_DIR "_SYS/"
-#define MANIFEST_PATH MANIFEST_DIR MANIFEST_FILE_NAME
-#define TMP_DECOMPRESSION_FILE_PATH "/" MANIFEST_DIR "/TMP.vgm"
+const uint32_t MANIFEST_MAGIC = 0x12345678; //Depricated
+#define MANIFEST_FILE_NAME ".MANIFEST" //Depricated
+#define SYS_DIR "_SYS/"
+#define MANIFEST_PATH SYS_DIR MANIFEST_FILE_NAME //Depricated
+#define TMP_DECOMPRESSION_FILE_PATH "/" SYS_DIR "/TMP.vgm"
 
 //SD & File Streaming
 SdFat SD;
-static File file, manifest;
+static File file;
 #define MAX_FILE_NAME_SIZE 128
 char fileName[MAX_FILE_NAME_SIZE];
 uint32_t numberOfFiles = 0;
@@ -100,7 +96,7 @@ uint32_t currentDirFileIndex = 0;
 uint32_t currentDirDirCount = 0; //How many directories are IN the current directory, mainly used for root only.
 uint32_t rootObjectCount = 0; //How many objects (files and folders) are in the root directory
 
-uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //Range inside the manifest file where the current files in the current dir are
+uint32_t dirStartIndex, dirEndIndex, dirCurIndex = 0; //indicies that mark the beginning, end, and current location inside of a dir
 LinkedList<int> rootTrackIndicies = LinkedList<int>(); //Valid VGM/VGZ file indicies on the root are stored here
 LinkedList<int> randFileList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 LinkedList<String> randDirList = LinkedList<String>();
@@ -166,7 +162,6 @@ MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(modeMenu)
   ,FIELD(VGMEngine.maxLoops,"Loops: ","",1,255,1,10,doNothing,noEvent,noStyle)
   ,SUBMENU(setLoopOneOff)
-  ,OP("Rebuild Manifest",doCreateManifest,enterEvent)
   //,EXIT("<Back")
 );
 
@@ -346,12 +341,6 @@ void setup()
   removeMeta();
   rootObjectCount = countFilesInDir("/");
   findTracksOnRoot();
-  // bool manifestError = false;
-  // do
-  // {
-  //   CreateManifest(manifestError);
-  //   manifestError = !VerifyManifest();
-  // }while(manifestError);
 
   nav.timeOut=0xFFFFFFFF; //This might be a slight issue if you decide to run your player for 50,000 days straight :/
   nav.idleTask = onMenuIdle;
@@ -493,7 +482,7 @@ bool VerifyDirectory(File f)
     return false;
   char tmpName[MAX_FILE_NAME_SIZE];
   f.getName(tmpName, MAX_FILE_NAME_SIZE);
-  if((String(tmpName)+"/").startsWith(MANIFEST_DIR)) //Ignore the system dir
+  if((String(tmpName)+"/").startsWith(SYS_DIR)) //Ignore the system dir
     return false;
   if(countFilesInDir(String(tmpName)) == 0) //Then, check to see if anything is even in the directory
     return false;
@@ -516,7 +505,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
   {
     case FIRST_START:
     {
-      //filePath = GetPathFromManifest(0);
+
     }
     break;
     case NEXT:
@@ -610,84 +599,6 @@ bool startTrack(FileStrategy fileStrategy, String request)
           }
           randIndex = randFileList.size()-1;
           file = getFileFromVwdIndex(dirCurIndex);
-          //uint32_t rng = playMode == SHUFFLE_ALL ? random(numberOfFiles-1) : random(dirStartIndex, dirEndIndex+1);
-        //   if(playMode == SHUFFLE_ALL) //Pick a random dir first, then pick a file
-        //   {
-        //     SD.chdir("/"); //Go to root
-        //     File tmp;
-        //     do
-        //     {
-        //       uint32_t rngDir = random(0, rootObjectCount+1);
-              
-        //       SD.vwd()->rewind();
-        //       if(rngDir != 0) //0 means the root dir was rolled
-        //       {
-        //         for(uint32_t i = 0; i<rngDir; i++)
-        //         {
-        //           tmp.close();
-        //           tmp.openNext(SD.vwd(), O_READ);
-        //         }
-        //       }
-        //       else
-        //       {
-        //         Serial.println("!!!!!!ROLLED ROOT!");
-        //         rng = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
-
-
-        //         // for(uint32_t i = 0; i<rootObjectCount; i++) //If you selected the root, keep going through files until you find one that isn't a directory. 
-        //         // {                                                  //If you go through the entire root and find no files, simply randomly pick a new directory in the next loop.
-        //         //   tmp.close();
-        //         //   tmp.openNext(SD.vwd(), O_READ);
-        //         //   char fnametmp[128];
-        //         //   tmp.getName(fnametmp, 128);
-        //         //   Serial.println(fnametmp);
-        //         //   if(!tmp.isDirectory()) //You've found a file on the root directory, get out of the loop
-        //         //   {
-        //         //     if(VGMEngine.header.read(&tmp)) //Verify the header to see if it's a VGM file
-        //         //     {
-        //         //       tmp.seekSet(0);
-        //         //       hasRootFile = true;
-        //         //       randFileList.add(i);
-        //         //       dirCurIndex = i;
-        //         //       break;
-        //         //     }
-        //         //   }
-        //         // }
-        //       }
-        //     } while (!VerifyDirectory(tmp) && !hasRootFile);
-            
-        //     if(hasRootFile) //Did you find a file on the root or did you find a directory
-        //     {
-        //       file = tmp;
-        //       tmp.close();
-        //       dirEndIndex = countFilesInDir("/")-1;
-        //       SD.chdir("/");
-        //       memset(dirName, 0, MAX_FILE_NAME_SIZE);
-        //       dirName[0] = '/';
-        //     }
-        //     else
-        //     {
-        //       tmp.getName(dirName, MAX_FILE_NAME_SIZE);
-        //       tmp.close();
-        //       dirEndIndex = countFilesInDir(String(dirName))-1;
-        //       SD.chdir(dirName);
-        //       rng = random(dirStartIndex, dirEndIndex+1);
-        //       randFileList.add(rng);
-        //       file = getFileFromVwdIndex(rng);
-        //       dirCurIndex = rng;
-        //     }
-        //   }
-        //   else if(playMode == SHUFFLE_DIR)
-        //   {
-
-        //   }
-
-        //   SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
-        //   Serial.print("ADDED DIR: "); Serial.println(dirName);
-        //   randDirList.add(String(dirName));
-        //   randIndex = randFileList.size()-1;
-
-        // }
         }
         else //Otherwise, move up in history
         {
@@ -697,7 +608,6 @@ bool startTrack(FileStrategy fileStrategy, String request)
           SD.chdir(randDirList.get(randIndex).c_str());
           Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
           file = getFileFromVwdIndex(dirCurIndex);
-          //filePath = GetPathFromManifest(randFileList.get(randIndex));
         }
       }
     }
@@ -976,62 +886,6 @@ void getDirIndices(String dir, String fname)
     // Serial.print("dirStartIndex: "); Serial.println(dirStartIndex);
     // Serial.print("dirEndIndex: "); Serial.println(dirEndIndex);
     // Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
-
-
-  // manifest.open(MANIFEST_PATH, O_READ);
-  // manifest.seek(0);
-  // manifest.readStringUntil('\n'); //Skip machine generated preamble
-  // String cur;
-  // if(dir == "~/") //Files are on the root
-  // {
-  //   for(uint32_t i = 0; i<numberOfFiles; i++)
-  //   {
-  //     cur = manifest.readStringUntil('\n');
-  //     cur.replace(String(i)+":", "");
-  //     if(cur.startsWith(dir))
-  //     {
-  //       if(dirStartIndex == 0xFFFFFFFF)
-  //         dirStartIndex = i;
-  //       if(cur.endsWith(fname)) 
-  //         dirCurIndex = i;
-  //       dirEndIndex = i;
-  //     }
-  //     else if(dirStartIndex != 0xFFFFFFFF)
-  //       break;
-  //   }
-  //   if(dirStartIndex == 0xFFFFFFFF)
-  //     dirStartIndex = 0;
-  // }
-  // else  //Files are in a dir
-  // {
-  //   for(uint32_t i = 0; i<numberOfFiles; i++)
-  //   {
-  //     cur = manifest.readStringUntil('\n');
-  //     cur.replace(String(i)+":", "");
-  //     if(cur.startsWith(dir)) //This line is problematic if two dirs begin with the same strings
-  //     {
-  //       String curDir = readStringUntil(cur, '/'); //that's what this check is for
-  //       if(curDir.equals(dir))
-  //       {
-  //         Serial.print("CUR: "); Serial.println(cur);
-  //         Serial.print("DIR: "); Serial.println(dir);
-  //         Serial.print("CURDIR: "); Serial.println(curDir);
-  //         Serial.print("FNAME: "); Serial.println(fname);
-  //         if(dirStartIndex == 0xFFFFFFFF)
-  //           dirStartIndex = i;
-  //         if(cur.endsWith(fname)) 
-  //           dirCurIndex = i;
-  //         dirEndIndex = i;
-  //         //break;
-  //       }
-  //     }
-  //     else if(dirStartIndex != 0xFFFFFFFF)
-  //       break;
-  //   }
-  //   if(dirStartIndex == 0xFFFFFFFF)
-  //     dirStartIndex = 0;
-  //}
-  
 }
 
 bool contains(String & in, char find)
@@ -1151,176 +1005,11 @@ uint32_t readFile32(FatFile *f)
   return d;
 }
 
-String GetPathFromManifest(uint32_t index) //Gives a VGM file path back from the manifest file
-{
-  String selection;
-  manifest.open(MANIFEST_PATH, O_READ);
-  manifest.seek(0);
-  manifest.readStringUntil('\n'); //Skip machine generated preamble
-  uint32_t i = 0;
-  while(true) //byte-wise string reads for bulk of seeking to be a little nicer to the RAM
-  {           //This part just skips every entry until we arrive to the line we want
-    if(i == index)
-      break;
-    if(manifest.read() == '\n')
-      i++;
-    if(i > numberOfFiles)
-      return "ERROR";
-  }
-  selection = manifest.readStringUntil('\n');
-  selection.replace(String(index) + ":", "");
-  selection.replace("~/", ""); //for root dirs
-  SD.chdir("/");
-  manifest.close();
-  return selection;
-}
-
 uint32_t freeKB()
 {
   uint32_t kb = SD.vol()->freeClusterCount();
   kb *= SD.vol()->blocksPerCluster()/2;
   return kb;
-}
-
-bool VerifyManifest()
-{
-  SD.chdir("/");
-  manifest.open(MANIFEST_PATH, O_READ);
-  if(!manifest)
-    return false;
-  manifest.readStringUntil('\n'); //Skip machine generated preamble
-  for(uint32_t i = 0; i<numberOfFiles; i++)
-  {
-    if(!manifest.readStringUntil('\n').startsWith(String(i)))
-      return false;
-  }
-  return true;
-}
-
-void CreateManifest(bool createNew)
-{
-  //Manifest format
-  //Preamble (String)
-  //<file paths>(Strings)
-  //...
-  //Magic Number (uint32_t BIN)
-  //Total # files (uint32_t BIN)
-  //Last SD Free Space in Blocks (uint32_t BIN)
-  u8g2.clearBuffer();
-  u8g2.setDrawColor(1);
-  u8g2.drawStr(0,16,"Indexing files");
-  u8g2.drawStr(0,32,"Please wait...");
-  u8g2.sendBuffer();
-  FatFile d, f;
-  int32_t prevBlocks;
-  String path = "";
-  char name[MAX_FILE_NAME_SIZE];
-  Serial.println("Checking file manifest...");
-  bool createNewManifest = createNew;
-
-  SD.chdir("/");
-  if(!SD.exists(MANIFEST_PATH))
-    createNewManifest = true;
-  else
-  {
-    manifest.open(MANIFEST_PATH, O_READ | O_WRITE);
-    manifest.seekEnd(-12); //Verify magic number to make sure file isn't completely corrupted
-    if(readFile32(&manifest) != MANIFEST_MAGIC)
-    {
-      Serial.println("MANIFEST MAGIC BAD!");
-      createNewManifest = true;
-    }
-    else
-    {
-      Serial.println("MANIFEST MAGIC OK");
-      manifest.seekEnd(-8);
-      numberOfFiles = readFile32(&manifest);
-      manifest.seekEnd(-4); //Read-in old manifest size
-      prevBlocks = readFile32(&manifest);
-      SD.remove(TMP_DECOMPRESSION_FILE_PATH);
-
-      if(prevBlocks != SD.vol()->freeClusterCount())
-        createNewManifest = true;
-    }
-  }
-
-  if(createNewManifest)
-  {
-    if(!SD.exists(MANIFEST_DIR))
-      SD.mkdir(MANIFEST_DIR);
-    if(!manifest.remove())
-    {
-      if(SD.exists(MANIFEST_PATH))
-        Serial.println("Failed to remove old file");
-    }
-    if(manifest.isOpen())
-      manifest.close();
-    manifest.open(MANIFEST_PATH, O_RDWR | O_CREAT);
-    numberOfFiles = 0;
-    prevBlocks = 0;
-
-    u8g2.drawStr(0,48,"Changes Detected...");
-    u8g2.drawStr(0,64,"Rebuilding Manifest...");
-    u8g2.sendBuffer();
-    Serial.println("File changes detected! Re-indexing. Please wait...");
-    manifest.seek(0);
-    manifest.println("MACHINE GENERATED FILE. DO NOT MODIFY");
-    while(d.openNext(SD.vwd(), O_READ)) //Go through root directories
-    {
-      if(d.isDir() && !d.isRoot()) //Include all dirs except root
-      {
-        d.getName(name, MAX_FILE_NAME_SIZE);
-        path = String(name);
-        if(path == MANIFEST_DIR) //Ignore the system file holding the manifest
-          continue;
-        numberOfDirectories++;
-        while(f.openNext(&d, O_READ)) //Once you're in a dir, go through each file and record them
-        {
-          f.getName(name, MAX_FILE_NAME_SIZE);
-          // if(strcmp(name, MANIFEST_FILE_NAME) == 0)
-          //   continue;
-          //Serial.println(path + "/" + String(name)); //Replace with manifest file right
-          manifest.print(numberOfFiles++);
-          manifest.print(":");
-          manifest.println(path + "/" + String(name));
-          f.close();
-        } 
-      }
-      // else //Get any files in the root dir here
-      // {
-        // d.getName(name, MAX_FILE_NAME_SIZE);
-        // manifest.print(numberOfFiles++);
-        // manifest.print(":");
-        // manifest.println(String(name));
-      // }
-      d.close();
-    }
-    SD.vwd()->rewind();
-    while(d.openNext(SD.vwd(), O_READ)) //Handle files in root separatly at the end to keep them in order
-    {
-      if(!d.isDir() && !d.isRoot())
-      {
-        d.getName(name, MAX_FILE_NAME_SIZE);
-        manifest.print(numberOfFiles++);
-        manifest.print(":~/");
-        manifest.println(String(name));
-      }
-      d.close();
-    }
-    manifest.close();
-    manifest.open(MANIFEST_PATH, O_AT_END | O_WRITE);
-    uint32_t tmp = SD.vol()->freeClusterCount();
-    manifest.write(&MANIFEST_MAGIC, 4);
-    manifest.write(&numberOfFiles, 4);
-    manifest.write(&tmp, 4);
-  }
-  else
-    Serial.println("No change in files, continuing...");
-  manifest.close();
-  Serial.println("Indexing complete");
-  u8g2.clearDisplay();
-  u8g2.sendBuffer();
-  nav.refresh();
 }
 
 void removeMeta() //Remove useless meta files
@@ -1412,8 +1101,6 @@ void loop()
     {
       if(playMode == IN_ORDER || playMode == SHUFFLE_ALL || playMode == SHUFFLE_DIR)
         startTrack(NEXT);
-      // else if(playMode == SHUFFLE_ALL)
-      //   startTrack(RND);
     }
   }
   if(buttons[1].fell()) //Prev
@@ -1431,7 +1118,7 @@ void loop()
     if(menuState == IN_MENU)
       nav.doNav(navCmd(downCmd));
   }
-  if(buttons[3].fell())                         //Select
+  if(buttons[3].fell()) //Select
     {
       if(menuState == IN_MENU) //If you're in the file-picker, the select button is used to enter dirs
         nav.doNav(navCmd(enterCmd)); 
@@ -1473,7 +1160,7 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
         // Serial.println(filePickMenu.selectedFile);
         // Serial.print("from folder:");
         // Serial.println(filePickMenu.selectedFolder);
-        if(filePickMenu.selectedFile == MANIFEST_FILE_NAME)
+        if(filePickMenu.selectedFile.startsWith(".")) //Do not allow users to select meta files
           return proceed;
         menuState = IN_VGM;
         if(filePickMenu.selectedFolder != currentDir)
@@ -1493,15 +1180,6 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
         }
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }
-  return proceed;
-}
-
-result doCreateManifest()
-{
-  do
-  {
-    CreateManifest(true);
-  }while(!VerifyManifest());
   return proceed;
 }
 
@@ -1552,13 +1230,11 @@ result onChoosePlaymode(eventMask e,navNode& _nav,prompt& item)
       case PlayMode::IN_ORDER:
       VGMEngine.maxLoops = 3;
       mainMenu[2].enable();
-      //getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::SHUFFLE_DIR:
       VGMEngine.maxLoops = 3;
       mainMenu[2].enable();
       clearRandomHistory();
-      //getDirIndicesFromFullPath(GetPathFromManifest(dirCurIndex));
       break;
       case PlayMode::PAUSE:
       break;
