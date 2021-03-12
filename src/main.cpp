@@ -557,19 +557,19 @@ bool startTrack(FileStrategy fileStrategy, String request)
               {
                 SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Current dir name right now would be root ("/").
                 randDirList.add(String(dirName));
-                hasDir = true;
-                Serial.println("PICKED ROOT");
+                hasDir = rootTrackIndicies.size() > 0; //If there are no valid files to pick on the root, just pick another random entry
+                //Serial.println("PICKED ROOT");
               }
               else //Otherwise, start scrolling through the entries to see if your pick is a directory
               {
-                Serial.print("Picked DIR at INDEX: "); Serial.println(rngDir);
+                //Serial.print("Picked DIR at INDEX: "); Serial.println(rngDir);
                 for(uint32_t i = 0; i<rngDir; i++)
                 {
                   tmp.close();
                   tmp.openNext(SD.vwd(), O_READ);
                 }
                 tmp.getName(dirName, MAX_FILE_NAME_SIZE);
-                Serial.print("DIR NAME: "); Serial.println(dirName);
+                //Serial.print("DIR NAME: "); Serial.println(dirName);
                 if(VerifyDirectory(tmp))
                 {
                   tmp.getName(dirName, MAX_FILE_NAME_SIZE);
@@ -582,7 +582,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           }
           if(String(dirName) == "/") //Dir is root. Pick from the pre-defiend list of valid VGM files
           {
-            Serial.println("Dir is root");
+            //Serial.println("Dir is root");
             SD.chdir("/");
             uint32_t rngFile = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
             randFileList.add(rngFile);
@@ -593,7 +593,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           {
             uint32_t fcount = countFilesInDir("/"+String(dirName));
             SD.chdir(("/"+String(dirName)).c_str());
-            Serial.print("fcount: ");Serial.println(fcount);
+            //Serial.print("fcount: ");Serial.println(fcount);
             uint32_t rng = random(0, fcount);
             randFileList.add(rng);
             dirCurIndex = rng;
@@ -608,7 +608,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           dirCurIndex = randFileList.get(randIndex);
           SD.chdir("/");
           SD.chdir(randDirList.get(randIndex).c_str());
-          Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
+          //Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
           file = getFileFromVwdIndex(dirCurIndex);
         }
       }
@@ -637,10 +637,10 @@ bool startTrack(FileStrategy fileStrategy, String request)
         dirCurIndex = randFileList.get(randIndex);
         SD.chdir("/");
         SD.chdir(("/"+randDirList.get(randIndex)).c_str());
-        Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
+        //Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
         char dirName[MAX_FILE_NAME_SIZE];
         SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
-        Serial.print("CURRENT DIR: "); Serial.println(dirName);
+        //Serial.print("CURRENT DIR: "); Serial.println(dirName);
         file = getFileFromVwdIndex(dirCurIndex);
       }
     }
@@ -678,7 +678,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
     break;
   }
 
-  Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
+  //Serial.print("dirCurIndex: "); Serial.println(dirCurIndex);
 
   if(!file)
   {
@@ -733,7 +733,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
       printlnw(VGMEngine.gd3.enTrackName);
       printlnw(VGMEngine.gd3.enSystemName);
       printlnw(VGMEngine.gd3.releaseDate);
-      Serial.print("DYNAMIC BYTES FREE: "); Serial.println(freeMemory());
+      //Serial.print("DYNAMIC BYTES FREE: "); Serial.println(freeMemory());
       if(menuState == IN_VGM)
         drawOLEDTrackInfo();
       set44k1ISR();
@@ -875,7 +875,7 @@ void getDirIndices(String dir, String fname)
       tmp.openNext(SD.vwd(), O_READ);
       char tmpName[MAX_FILE_NAME_SIZE];
       tmp.getName(tmpName, MAX_FILE_NAME_SIZE);
-      Serial.println(tmpName);
+      //Serial.println(tmpName);
       if(strncmp(fname.c_str(), tmpName, sizeof(fname.c_str())) == 0)
       {
         dirCurIndex = i;
