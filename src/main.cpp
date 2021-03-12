@@ -338,7 +338,9 @@ void setup()
   Serial.flush();
 
   //Prepare files
-  removeMeta();
+  if(!SD.exists(SYS_DIR))
+    SD.mkdir(SYS_DIR);
+
   rootObjectCount = countFilesInDir("/");
   findTracksOnRoot();
 
