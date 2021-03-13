@@ -341,7 +341,11 @@ bool FatFile::open(FatFile* dirFile, fname_t* fname, uint8_t oflag) {
         if ((ldir->ord & LDIR_ORD_LAST_LONG_ENTRY) == 0) {
           continue;
         }
-        lfnOrd = ord = ldir->ord & 0X1F;
+        ord = ldir->ord & 0X1F;
+        if (ord != (freeNeed - 1)) {
+          continue;
+        }
+        lfnOrd = ord;
         chksum = ldir->chksum;
       } else if (ldir->ord != --ord || chksum != ldir->chksum) {
         lfnOrd = 0;

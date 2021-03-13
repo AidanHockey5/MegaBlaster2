@@ -188,7 +188,7 @@ public:
       case enterCmd: if (nav.sel>=USE_BACKDOTS) {
           String selFile=SDMenuT<FS>::entry(nav.sel-USE_BACKDOTS);
           if (selFile.endsWith("/")) {
-            // Serial.print("\nOpen folder...");
+            Serial.print("\nOpen folder...");
             //open folder (reusing the menu)
             folderName+=selFile;
             SDMenuT<FS>::goFolder(folderName);

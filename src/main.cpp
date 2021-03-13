@@ -314,8 +314,8 @@ void setup()
 
   //OLED title logo
   u8g2.drawXBM(0,0, logo_width, logo_height, logo);
-  const String bootloaderFWVersion = "BL: " + String(BOOTLOADER_VERSION) + "  FW: " + String(FIRMWARE_VERSION) + " 2021";
-  u8g2.drawStr(0, 64, bootloaderFWVersion.c_str());
+  //const String bootloaderFWVersion = "BL: " + String(BOOTLOADER_VERSION) + "  FW: " + String(FIRMWARE_VERSION) + " 2021";
+  //u8g2.drawStr(0, 64, bootloaderFWVersion.c_str());
   u8g2.sendBuffer();
   delay(3000);
   u8g2.clearDisplay();
@@ -1157,11 +1157,11 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
   // switch(event) {//for now events are filtered only for enter, so we dont need this checking
   //   case enterCmd:
       if (_nav.root->navFocus==(navTarget*)&filePickMenu) {
-        // Serial.println();
-        // Serial.print("selected file:");
-        // Serial.println(filePickMenu.selectedFile);
-        // Serial.print("from folder:");
-        // Serial.println(filePickMenu.selectedFolder);
+        Serial.println();
+        Serial.print("selected file:");
+        Serial.println(filePickMenu.selectedFile);
+        Serial.print("from folder:");
+        Serial.println(filePickMenu.selectedFolder);
         if(filePickMenu.selectedFile.startsWith(".")) //Do not allow users to select meta files
           return proceed;
         menuState = IN_VGM;
