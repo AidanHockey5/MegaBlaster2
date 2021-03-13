@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.1"
+#define FIRMWARE_VERSION "1.2"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -314,8 +314,8 @@ void setup()
 
   //OLED title logo
   u8g2.drawXBM(0,0, logo_width, logo_height, logo);
-  //const String bootloaderFWVersion = "BL: " + String(BOOTLOADER_VERSION) + "  FW: " + String(FIRMWARE_VERSION) + " 2021";
-  //u8g2.drawStr(0, 64, bootloaderFWVersion.c_str());
+  const String bootloaderFWVersion = "BL: " + String(BOOTLOADER_VERSION) + "  FW: " + String(FIRMWARE_VERSION) + " 2021";
+  u8g2.drawStr(0, 64, bootloaderFWVersion.c_str());
   u8g2.sendBuffer();
   delay(3000);
   u8g2.clearDisplay();
