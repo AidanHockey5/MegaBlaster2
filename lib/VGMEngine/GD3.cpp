@@ -24,6 +24,8 @@ bool GD3::read(File *f, uint32_t gd3Offset)
 {
     free(data);
     uint32_t prePos = f->curPosition(); 
+    if(gd3Offset > f->size()) //catch messed up Gd3 offsets before an infinite seek happens
+        return false; 
     f->seek(gd3Offset);
     uint32_t magic = 0; 
     f->read(&magic, 4);
