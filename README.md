@@ -6,6 +6,7 @@ Demo video can be found here: https://www.youtube.com/watch?v=4sKwGWfikdc
 
 [Store Link](https://www.aidanlawrence.com/product/mega-blaster-2/)
 
+[Discord Link](https://discord.gg/M2skqkZhw2)
 
 This project contains the source material for the Mega Blaster 2, a hardware Sega Genesis/Mega Drive video game music (VGM) player that utilizes the real sound chips. Play any Genesis track on-demand with brilliant sound quality on the actual YM2612/YM3438 and SN76489 PSG synthesizer chips that were found in the real Genesis consoles(1). The Mega Blaster 2 is compatible with both .vgm and .vgz files and can support both the YM2612 and YM3438 simply by changing the DIP switch values. This unit does not use any emulated sound - these are the real chips playing back logged data from the vgm files. 
 
