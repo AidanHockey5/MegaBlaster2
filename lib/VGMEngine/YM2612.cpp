@@ -31,6 +31,8 @@ YM2612::YM2612(Bus* _bus, uint8_t _CS, uint8_t _RD, uint8_t _WR, uint8_t _A0, ui
 
 void YM2612::write(uint8_t addr, uint8_t data, bool a1)
 {
+    if(addr == 0x21 || addr == 0x2C) //Prevent writes to test registers
+        return;
     //OPTIMIZED FOR MB2 ARM CPU, NOT PORTABLE!
     a1 == true ? REG_PORT_OUTSET1 = PORT_PB14 : REG_PORT_OUTCLR1 = PORT_PB14; //A1 CHECK
     REG_PORT_OUTCLR1 = PORT_PB13; //A0 LOW
