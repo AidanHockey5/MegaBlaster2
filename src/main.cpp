@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.21"
+#define FIRMWARE_VERSION "1.22"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -101,7 +101,7 @@ LinkedList<int> rootTrackIndicies = LinkedList<int>(); //Valid VGM/VGZ file indi
 LinkedList<int> randFileList = LinkedList<int>(); //Used to keep a history of file indices when in shuffle mode to allow for forward/backwards playback controls
 LinkedList<String> randDirList = LinkedList<String>();
 int randIndex = 0; 
-#define MAX_RAND_HISTORY_SIZE 5
+#define MAX_RAND_HISTORY_SIZE 20
 
 Adafruit_ZeroTimer timer1 = Adafruit_ZeroTimer(3);
 Adafruit_ZeroTimer timer2 = Adafruit_ZeroTimer(4);
@@ -540,8 +540,8 @@ bool startTrack(FileStrategy fileStrategy, String request)
           if(playMode == SHUFFLE_DIR)
           {
             
-            // SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Get the current dir name and add it to the random dir list for history seeking
-            // Serial.print("Dir Name SHUFFLE_DIR: "); Serial.println(dirName);
+            SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Get the current dir name and add it to the random dir list for history seeking
+            //Serial.print("Dir Name SHUFFLE_DIR: "); Serial.println(dirName);
             strcpy(dirName, currentDir.c_str());
             randDirList.add(currentDir);
           }
@@ -555,9 +555,16 @@ bool startTrack(FileStrategy fileStrategy, String request)
               uint32_t rngDir = random(0, rootObjectCount+2); //+2 is used for picking the root. random() is exclusive on the max side, so if the roll is rootObjectCount+1, it would otherwise be out-of-bounds, but we will use it to represent a root roll
               if(rngDir == rootObjectCount+1) //+1, not +2 here. Remember, random is exclusive on the max side. If this statement is true, we have just rolled the root dir
               {
-                SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Current dir name right now would be root ("/").
-                randDirList.add(String(dirName));
-                hasDir = rootTrackIndicies.size() > 0; //If there are no valid files to pick on the root, just pick another random entry
+                if(rootTrackIndicies.size() == 0) //If there are no valid files to pick on the root, just pick another random entry)
+                {
+                  hasDir = false;
+                }
+                else
+                {
+                  hasDir = true;
+                  SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE); //Current dir name right now would be root ("/").
+                  randDirList.add(String(dirName));
+                }
                 //Serial.println("PICKED ROOT");
               }
               else //Otherwise, start scrolling through the entries to see if your pick is a directory
@@ -607,12 +614,13 @@ bool startTrack(FileStrategy fileStrategy, String request)
           randIndex++;
           dirCurIndex = randFileList.get(randIndex);
           SD.chdir("/");
-          SD.chdir(randDirList.get(randIndex).c_str());
+          SD.chdir(("/"+randDirList.get(randIndex)).c_str());
           //Serial.print("DIR NAME: "); Serial.println(randDirList.get(randIndex));
           file = getFileFromVwdIndex(dirCurIndex);
         }
       }
     }
+    //Serial.print("RAND INDEX"); Serial.print(randIndex); Serial.print("/"); Serial.println(randDirList.size()-1);
     break;
     case PREV:
     {
@@ -640,10 +648,12 @@ bool startTrack(FileStrategy fileStrategy, String request)
         //Serial.print("DIR FROM LIST: "); Serial.println(randDirList.get(randIndex));
         char dirName[MAX_FILE_NAME_SIZE];
         SD.vwd()->getName(dirName, MAX_FILE_NAME_SIZE);
-        //Serial.print("CURRENT DIR: "); Serial.println(dirName);
+        // Serial.print("CURRENT DIR: "); Serial.println(dirName);
+        // Serial.print("CURRENT F_INDEX: "); Serial.println(dirCurIndex);
         file = getFileFromVwdIndex(dirCurIndex);
       }
     }
+    //Serial.print("RAND INDEX"); Serial.print(randIndex); Serial.print("/"); Serial.println(randDirList.size()-1);
     break;
     case RND:
     { //This request will disrupt the random history and immediatly create a new node at the end of the random history list
@@ -863,25 +873,29 @@ void getDirIndices(String dir, String fname)
   // Serial.print("INCOMING FNAME: "); Serial.println(fname);
   dirStartIndex = 0;
   dirEndIndex = countFilesInDir(dir)-1; 
-  dirCurIndex = 0;
+  dirCurIndex = 0xFFFFFFFF;
 
   SD.chdir(dir.c_str());
+  //SD.vwd()->rewind();
   File tmp;
 
   if(fname != "")
   {
-    for(uint32_t i = 0; i<dirEndIndex; i++)
+    for(uint32_t i = 0; i<dirEndIndex; i++) 
     {
       tmp.openNext(SD.vwd(), O_READ);
       char tmpName[MAX_FILE_NAME_SIZE];
+      memset(tmpName, 0, sizeof(tmpName));
       tmp.getName(tmpName, MAX_FILE_NAME_SIZE);
       //Serial.println(tmpName);
-      if(strncmp(fname.c_str(), tmpName, sizeof(fname.c_str())) == 0)
+      if(strcmp(fname.c_str(), tmpName) == 0)
       {
         dirCurIndex = i;
       }
       tmp.close();
     }
+    if(dirCurIndex == 0xFFFFFFFF)
+      dirCurIndex = dirEndIndex;
   }
     // Serial.print("DIR: "); Serial.println(dir);
     // Serial.print("FNAME: "); Serial.println(fname);
@@ -1179,6 +1193,7 @@ result filePick(eventMask event, navNode& _nav, prompt &item)
           else
             randIndex++;
           randFileList.add(dirCurIndex);
+          randDirList.add(filePickMenu.selectedFolder);
         }
         startTrack(REQUEST, filePickMenu.selectedFolder+filePickMenu.selectedFile);
       }

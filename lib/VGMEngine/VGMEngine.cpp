@@ -500,7 +500,7 @@ uint16_t VGMEngineClass::parseVGM()
                 dacStreamCurLength = dataBlocks[blockID].DataLength;
                 activeDacStreamBlock = blockID;
                 dataBlocks[blockID].LengthMode = bitRead(flags, 0) == 1 ? 0b10000001 : 0; //Set proper loop flag. VGMSpec, why the hell did you pick a different bit for the same flag as the 0x93 command. Stupid!
-               //Serial.print("0x95: "); // Serial.print(streamID, HEX); Serial.print(" "); Serial.print(blockID, HEX); Serial.print(" "); Serial.print(flags, HEX); Serial.println("   --- START STREAM FAST");
+                //Serial.print("0x95: "); // Serial.print(streamID, HEX); Serial.print(" "); Serial.print(blockID, HEX); Serial.print(" "); Serial.print(flags, HEX); Serial.println("   --- START STREAM FAST");
                 //Serial.print("BLOCK ID: "); Serial.println(blockID);
             }
             break;
