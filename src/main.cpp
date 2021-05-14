@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.22"
+#define FIRMWARE_VERSION "1.23"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -264,7 +264,11 @@ void setup()
   SPI.begin();
   Serial.begin(115200);
 
-  si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0);
+  if(!si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0)) //Can't find clock gen at 0x6F? Reassign to 0x60 and try again to see if 'A' variant is installed.
+  {
+    si5351 = si5351A;
+    si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0, 0);
+  }
   si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_4MA);
   si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_4MA);
   si5351.set_freq(NTSC_YMCLK*100ULL, SI5351_CLK0); //CLK0 YM
