@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.23"
+#define FIRMWARE_VERSION "1.24"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -156,12 +156,76 @@ TOGGLE(VGMEngine.loopOneOffs, setLoopOneOff, "Loop One-offs: ", doNothing, noEve
     ,VALUE("NO",false,doNothing,noEvent)
 );
 
+TOGGLE(VGMEngine.ym2612CHControl[0x00], setYM2612CH1, "FM CH1: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.ym2612CHControl[0x01], setYM2612CH2, "FM CH2: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.ym2612CHControl[0x02], setYM2612CH3, "FM CH3: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.ym2612CHControl[0x04], setYM2612CH4, "FM CH4: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.ym2612CHControl[0x05], setYM2612CH5, "FM CH5: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.ym2612CHControl[0x06], setYM2612CH6, "FM CH6: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.sn76489CHControl[0x00], setSN76489CH1, "PSG CH1: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.sn76489CHControl[0x01], setSN76489CH2, "PSG CH2: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.sn76489CHControl[0x02], setSN76489CH3, "PSG CH3: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+TOGGLE(VGMEngine.sn76489CHControl[0x03], setSN76489CH4, "PSG CH4: ", doNothing, noEvent, noStyle
+    ,VALUE("YES",true,doNothing,noEvent)
+    ,VALUE("NO",false,doNothing,noEvent)
+);
+
+MENU(channelControl,"Channel Control",doNothing,noEvent,wrapStyle
+  ,SUBMENU(setYM2612CH1)
+  ,SUBMENU(setYM2612CH2)
+  ,SUBMENU(setYM2612CH3)
+  ,SUBMENU(setYM2612CH4)
+  ,SUBMENU(setYM2612CH5)
+  ,SUBMENU(setYM2612CH6)
+  ,SUBMENU(setSN76489CH1)
+  ,SUBMENU(setSN76489CH2)
+  ,SUBMENU(setSN76489CH3)
+  ,SUBMENU(setSN76489CH4)
+);
+
 #define MAX_DEPTH 2
 MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,SUBMENU(filePickMenu)
   ,SUBMENU(modeMenu)
   ,FIELD(VGMEngine.maxLoops,"Loops: ","",1,255,1,10,doNothing,noEvent,noStyle)
   ,SUBMENU(setLoopOneOff)
+  ,SUBMENU(channelControl)
   //,EXIT("<Back")
 );
 

@@ -61,6 +61,13 @@ public:
     uint16_t getLoops();
     uint16_t maxLoops = 3;
     bool loopOneOffs = false;
+    //There are only 6 channels, but for chip writes we use (0x00, 0x01, 0x02, 0x04, 0x05 and 0x06)
+    //The extra array positions are there just to avoid crashes in case the VGM file tries to write to an invalid channel
+    bool ym2612CHControl[8] = {true, true, true, true, true, true, true, true};
+    //There are 4 channels on PSG (3 tone and 1 noise)
+    bool sn76489CHControl[4] = {true, true, true, true};
+    //Keeps track of the currently latched channel so we can ignore writes if disabled
+    uint8_t sn76489Latched = 0;
     VGMEngineState state = IDLE;
     bool resetISR = false;
     bool isBusy = false;
