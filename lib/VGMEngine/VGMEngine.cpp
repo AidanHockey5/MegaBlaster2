@@ -185,9 +185,6 @@ bool VGMEngineClass::storePCM(bool skip)
                 file->seek(header.vgmDataOffset+0x34+pcmBufferEndPosition+(7*count));
 
             dataBlocks[openSlot].DataStart = lastBlockEndPos;
-            
-            
-            
             //byte-by-byte
             // uint32_t lastBlockEndPos = openSlot == 0 ? 0 : dataBlocks[openSlot-1].DataStart+dataBlocks[openSlot-1].DataLength;
             // for(uint32_t i = lastBlockEndPos; i<lastBlockEndPos+dataBlocks[openSlot].DataLength; i++)
@@ -297,7 +294,14 @@ VGMEngineState VGMEngineClass::play()
         {
             dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
-                ym2612->write(0x2A, ram.ReadByte(dacStreamBufPos++), 0);
+            {
+                uint8_t data = ram.ReadByte(pcmBufferPosition++);
+                // check if channel 6 is enabled, since this is a DAC write
+                if (ym2612CHControl[0x06])
+                {
+                    ym2612->write(0x2A, data, 0);
+                }
+            }
             else if(bitRead(dataBlocks[activeDacStreamBlock].LengthMode, 7)) //Looping length mode defined in 0x93 DAC STREAM
             {
                 dacStreamBufPos = dataBlocks[activeDacStreamBlock].DataStart;
@@ -344,16 +348,57 @@ uint16_t VGMEngineClass::parseVGM()
         switch(cmd)
         {
             case 0x4F:
-                sn76489->write(0x06);
-                sn76489->write(readBufOne());
-            break;
             case 0x50:
-                sn76489->write(readBufOne());
-            break;
+            {
+                // check for game gear stereo write
+                if (cmd == 0x4F)
+                {
+                    sn76489->write(0x06);
+                }
+                uint8_t data = readBufOne();
+                // check for a latch write (MSB=1)
+                if ((data & 0x80) != 0)
+                {
+                    // decode the channel and store it
+                    sn76489Latched = (data & 0x60) >> 5;
+                    // if the latched channel is disabled then make it silent
+                    if (!sn76489CHControl[sn76489Latched])
+                    {
+                        // override the write to volume full attenuation
+                        data = (data & 0xE0) + 0x1F;
+                    }
+                    sn76489->write(data);
+                }
+                else
+                {
+                    // only write data if the latched channel is enabled
+                    if (sn76489CHControl[sn76489Latched])
+                    {
+                        sn76489->write(data);
+                    }
+                }
+                break;
+            }
             case 0x52:
-                ym2612->write(readBufOne(), readBufOne(), 0);
-            break;
+            {
+                uint8_t addr = readBufOne();
+                uint8_t data = readBufOne();
+                // check for an operator/channel key on/off write
+                if (addr == 0x28)
+                {
+                    uint8_t channel = (data & 0x07);
+                    // if the channel is disabled then make it silent (force a key-off)
+                    if (!ym2612CHControl[channel])
+                    {
+                        // override the write disabling the operators
+                        data = (data & 0x0F);
+                    }
+                }
+                ym2612->write(addr, data, 0);
+                break;
+            }
             case 0x53:
+                // part 2 writes don't deal with operator key on/off operations
                 ym2612->write(readBufOne(), readBufOne(), 1);
             break;
             case 0x61:
@@ -419,7 +464,12 @@ uint16_t VGMEngineClass::parseVGM()
             case 0x8E:
             case 0x8F:
             {
-                ym2612->write(0x2A, ram.ReadByte(pcmBufferPosition++), 0);
+                uint8_t data = ram.ReadByte(pcmBufferPosition++);
+                // check if channel 6 is enabled, since this is a DAC write
+                if (ym2612CHControl[0x06])
+                {
+                    ym2612->write(0x2A, data, 0);
+                }
                 uint8_t wait = (cmd & 0x0F);
                 if(wait == 0)
                     break;
