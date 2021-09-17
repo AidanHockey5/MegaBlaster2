@@ -1,60 +1,4 @@
-19114845285248398
-Art
-FM_1
-
-
-0
-0
-0
-Art
-FM_2
-
-
-0
-0
-0
-Art
-logo1
-
-
-0
-0
-0
-Art
-logo_2
-
-
-0
-0
-0
-Art
-logo_3
-
-
-0
-0
-0
-Art
-square_1
-
-
-0
-0
-0
-Art
-square_half
-
-
-0
-0
-0
-Art
-triangle
-
-
-0
-0
-0
+19030916952082073
 Battery
 BatteryHolder_Bulgin_BX0036_1xC
 Bulgin Battery Holder, BX0036, Battery Type C (https://www.bulgin.com/products/pub/media/bulgin/data/Battery_holders.pdf)
@@ -356,13 +300,6 @@ battery CR-3032 coin cell vertical
 0
 2
 2
-Boom Precision Elec PJ-307C
-SWITCHCRAFT_35RAPC4BHN2
-
-
-0
-5
-5
 Button_Switch_Keyboard
 SW_Cherry_MX_1.00u_PCB
 Cherry MX keyswitch, 1.00u, PCB mount, http://cherryamericas.com/wp-content/uploads/2014/12/mx_cat.pdf
@@ -56272,265 +56209,6 @@ Yellow 5381 Series LED
 0
 2
 2
-MegaMIDI_FootprintCache
-3362P-1-103LF
-
-
-0
-3
-3
-MegaMIDI_FootprintCache
-BARREL_JACK
-DC Barrel Jack
-Power Jack
-0
-3
-3
-MegaMIDI_FootprintCache
-CP_Elec_6.3x5.8
-SMT capacitor, aluminium electrolytic, 6.3x5.8
-
-0
-2
-2
-MegaMIDI_FootprintCache
-CP_Elec_6.3x7.7
-SMT capacitor, aluminium electrolytic, 6.3x7.7
-
-0
-2
-2
-MegaMIDI_FootprintCache
-CP_Elec_10x10
-SMT capacitor, aluminium electrolytic, 10x10
-
-0
-2
-2
-MegaMIDI_FootprintCache
-C_0603
-Capacitor SMD 0603, reflow soldering, AVX (see smccp.pdf)
-capacitor 0603
-0
-2
-2
-MegaMIDI_FootprintCache
-C_0805
-Capacitor SMD 0805, reflow soldering, AVX (see smccp.pdf)
-capacitor 0805
-0
-2
-2
-MegaMIDI_FootprintCache
-C_1206
-Capacitor SMD 1206, reflow soldering, AVX (see smccp.pdf)
-capacitor 1206
-0
-2
-2
-MegaMIDI_FootprintCache
-Crystal_SMD_HC49-SD
-SMD Crystal HC-49-SD http://cdn-reichelt.de/documents/datenblatt/B400/xxx-HC49-SMD.pdf, 11.4x4.7mm^2 package
-SMD SMT crystal
-0
-2
-2
-MegaMIDI_FootprintCache
-DIP-6_W7.62mm
-6-lead though-hole mounted DIP package, row spacing 7.62 mm (300 mils)
-THT DIP DIL PDIP 2.54mm 7.62mm 300mil
-0
-6
-6
-MegaMIDI_FootprintCache
-DIP-16_W7.62mm
-16-lead though-hole mounted DIP package, row spacing 7.62 mm (300 mils)
-THT DIP DIL PDIP 2.54mm 7.62mm 300mil
-0
-16
-16
-MegaMIDI_FootprintCache
-DIP-20_W7.62mm
-20-lead though-hole mounted DIP package, row spacing 7.62 mm (300 mils)
-THT DIP DIL PDIP 2.54mm 7.62mm 300mil
-0
-20
-20
-MegaMIDI_FootprintCache
-DIP-24_W15.24mm
-24-lead though-hole mounted DIP package, row spacing 15.24 mm (600 mils)
-THT DIP DIL PDIP 2.54mm 15.24mm 600mil
-0
-24
-24
-MegaMIDI_FootprintCache
-D_SMA
-Diode SMA (DO-214AC)
-Diode SMA (DO-214AC)
-0
-2
-2
-MegaMIDI_FootprintCache
-D_SOD-123
-SOD-123
-SOD-123
-0
-2
-2
-MegaMIDI_FootprintCache
-LCD-20x4
-
-
-0
-20
-17
-MegaMIDI_FootprintCache
-LED_0805
-LED 0805 smd package
-LED led 0805 SMD smd SMT smt smdled SMDLED smtled SMTLED
-0
-2
-2
-MegaMIDI_FootprintCache
-L_4x4
-
-
-0
-2
-2
-MegaMIDI_FootprintCache
-L_Radial_D8.7mm_P5.00mm_Fastron_07HCP
-L, Radial series, Radial, pin pitch=5.00mm, , diameter=8.7mm, Fastron, 07HCP, http://cdn-reichelt.de/documents/datenblatt/B400/DS_07HCP.pdf
-L Radial series Radial pin pitch 5.00mm  diameter 8.7mm Fastron 07HCP
-0
-2
-2
-MegaMIDI_FootprintCache
-MountingHole_3.2mm_M3
-Mounting Hole 3.2mm, no annular, M3
-mounting hole 3.2mm no annular m3
-0
-0
-0
-MegaMIDI_FootprintCache
-PJ320E_3.5mm_Jack
-Headphones with microphone connector, 3.5mm, 4 pins.
-3.5mm jack mic microphone phones headphones 4pins audio plug
-0
-5
-5
-MegaMIDI_FootprintCache
-Pin_Header_Straight_1x01_Pitch2.54mm
-Through hole straight pin header, 1x01, 2.54mm pitch, single row
-Through hole pin header THT 1x01 2.54mm single row
-0
-1
-1
-MegaMIDI_FootprintCache
-Pin_Header_Straight_2x03_Pitch2.54mm
-Through hole straight pin header, 2x03, 2.54mm pitch, double rows
-Through hole pin header THT 2x03 2.54mm double row
-0
-6
-6
-MegaMIDI_FootprintCache
-R_0805
-Resistor SMD 0805, reflow soldering, Vishay (see dcrcw.pdf)
-resistor 0805
-0
-2
-2
-MegaMIDI_FootprintCache
-RotaryEncoder_Alps_EC11E-Switch_Vertical_H20mm
-Alps rotary encoder, EC12E... with switch, vertical shaft, http://www.alps.com/prod/info/E/HTML/Encoder/Incremental/EC11/EC11E15204A3.html
-rotary encoder
-0
-7
-6
-MegaMIDI_FootprintCache
-SOIC-8_3.9x4.9mm_Pitch1.27mm
-8-Lead Plastic Small Outline (SN) - Narrow, 3.90 mm Body [SOIC] (see Microchip Packaging Specification 00000049BS.pdf)
-SOIC 1.27
-0
-8
-8
-MegaMIDI_FootprintCache
-SOIC-16_3.9x9.9mm_Pitch1.27mm
-16-Lead Plastic Small Outline (SL) - Narrow, 3.90 mm Body [SOIC] (see Microchip Packaging Specification 00000049BS.pdf)
-SOIC 1.27
-0
-16
-16
-MegaMIDI_FootprintCache
-SOT-223-3_TabPin2
-module CMS SOT223 4 pins
-CMS SOT
-0
-4
-3
-MegaMIDI_FootprintCache
-SW_TH_Tactile_Omron_B3F-10xx
-SW_TH_Tactile_Omron_B3F-10xx_https://www.omron.com/ecb/products/pdf/en-b3f.pdf
-Omron B3F-10xx
-0
-4
-4
-MegaMIDI_FootprintCache
-TO-263-5_TabPin3
-TO-263 / D2PAK / DDPAK SMD package, http://www.infineon.com/cms/en/product/packages/PG-TO263/PG-TO263-5-1/
-D2PAK DDPAK TO-263 D2PAK-5 TO-263-5 SOT-426
-0
-10
-5
-MegaMIDI_FootprintCache
-TQFP-64_14x14mm_Pitch0.8mm
-64-Lead Plastic Thin Quad Flatpack (PF) - 14x14x1 mm Body, 2.00 mm [TQFP] (see Microchip Packaging Specification 00000049BS.pdf)
-QFP 0.8
-0
-64
-64
-MegaMIDI_FootprintCache
-USB_B
-USB B connector
-USB_B USB_DEV
-0
-6
-5
-MegaMIDI_FootprintCache
-din-5
-Din 5 (MIDI), Pro Signal P/N PSG03463
-
-0
-7
-6
-MegaMIDI_FootprintCache
-logo_1
-
-
-0
-0
-0
-MegaMIDI_FootprintCache
-logo_2
-
-
-0
-0
-0
-MegaMIDI_FootprintCache
-logo_3
-
-
-0
-0
-0
-MegaMIDI_FootprintCache
-microSD_HC_Hirose_DM3D-SF
-Micro SD, SMD, right-angle, push-pull (https://media.digikey.com/PDF/Data%20Sheets/Hirose%20PDFs/DM3D-SF.pdf)
-Micro SD
-0
-14
-11
 Module
 A20_OLINUXINO_LIME2
 A20 Olinuxino LIME2, 1.2GHz, 512-1024MB RAM, Micro-SD, NAND or eMMC, 1000Mbit Ethernet
@@ -83348,80 +83026,24 @@ varistor SIOV
 0
 2
 2
-bourns
-3362P-1-103LF
-
-
-0
-3
-3
-customMicroSD
-SOFNG_TF-002T-15
-
-
-0
-12
-8
-customMicroSD
-SOFNG_TF_15x15_PUSH_PUSH
-
-
-0
-13
-9
-customMicroSD
-microSD_SOFNG_TF-002T-15
+art
+textlogo1
 
 
 0
 0
 0
-custom_inductors
-6x6Inductor
+art
+tiger_logo
 
 
 0
-2
-2
-custom_inductors
-L_4x4
+0
+0
+art
+tiger_logo_mirror
 
 
 0
-2
-2
-custom_inductors
-oled_128x64
-
-
 0
-4
-4
-custom_oled
-oled_128x64
-
-
 0
-4
-4
-inductor_1008
-NLCV25T-330K-EF
-
-
-0
-2
-2
-lcd
-LCD-20x4
-
-
-0
-20
-17
-midicon
-din-5
-Din 5 (MIDI), Pro Signal P/N PSG03463
-
-0
-7
-6

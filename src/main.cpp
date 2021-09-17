@@ -152,58 +152,58 @@ CHOOSE(playMode,modeMenu,"Mode:",onChoosePlaymode,exitEvent,noStyle
 );
 
 TOGGLE(VGMEngine.loopOneOffs, setLoopOneOff, "Loop One-offs: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x00], setYM2612CH1, "FM CH1: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x01], setYM2612CH2, "FM CH2: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x02], setYM2612CH3, "FM CH3: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x04], setYM2612CH4, "FM CH4: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x05], setYM2612CH5, "FM CH5: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.ym2612CHControl[0x06], setYM2612CH6, "FM CH6: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.sn76489CHControl[0x00], setSN76489CH1, "PSG CH1: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.sn76489CHControl[0x01], setSN76489CH2, "PSG CH2: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.sn76489CHControl[0x02], setSN76489CH3, "PSG CH3: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 TOGGLE(VGMEngine.sn76489CHControl[0x03], setSN76489CH4, "PSG CH4: ", doNothing, noEvent, noStyle
-    ,VALUE("YES",true,doNothing,noEvent)
-    ,VALUE("NO",false,doNothing,noEvent)
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
 );
 
 MENU(channelControl,"Channel Control",doNothing,noEvent,wrapStyle
