@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.24"
+#define FIRMWARE_VERSION "1.25"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -344,7 +344,7 @@ void setup()
 
   //RNG
   trngInit();
-  randomSeed(trngGetRandomNumber());
+  //randomSeed(trngGetRandomNumber());
 
   //DEBUG
   //pinMode(DEBUG_LED, INPUT_PULLUP);
@@ -534,6 +534,11 @@ void findTracksOnRoot()
   Serial.print("size of root tracks: "); Serial.println(rootTrackIndicies.size());
 }
 
+int RNG(int lower, int upper)
+{
+  return (trngGetRandomNumber() % (upper - lower + 1)) + lower;
+}
+
 File getFileFromVwdIndex(uint32_t index)
 {
   SD.vwd()->rewind();
@@ -620,7 +625,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
             {
               SD.chdir("/");
               memset(dirName, 0, MAX_FILE_NAME_SIZE);
-              uint32_t rngDir = random(0, rootObjectCount+2); //+2 is used for picking the root. random() is exclusive on the max side, so if the roll is rootObjectCount+1, it would otherwise be out-of-bounds, but we will use it to represent a root roll
+              uint32_t rngDir = RNG(0, rootObjectCount+2); //+2 is used for picking the root. RNG() is exclusive on the max side, so if the roll is rootObjectCount+1, it would otherwise be out-of-bounds, but we will use it to represent a root roll
               if(rngDir == rootObjectCount+1) //+1, not +2 here. Remember, random is exclusive on the max side. If this statement is true, we have just rolled the root dir
               {
                 if(rootTrackIndicies.size() == 0) //If there are no valid files to pick on the root, just pick another random entry)
@@ -659,7 +664,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
           {
             //Serial.println("Dir is root");
             SD.chdir("/");
-            uint32_t rngFile = rootTrackIndicies.get(random(0, rootTrackIndicies.size()));
+            uint32_t rngFile = rootTrackIndicies.get(RNG(0, rootTrackIndicies.size()));
             randFileList.add(rngFile);
             dirCurIndex = rngFile;
             currentDir = "/";
@@ -669,7 +674,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
             uint32_t fcount = countFilesInDir("/"+String(dirName));
             SD.chdir(("/"+String(dirName)).c_str());
             //Serial.print("fcount: ");Serial.println(fcount);
-            uint32_t rng = random(0, fcount);
+            uint32_t rng = RNG(0, fcount);
             randFileList.add(rng);
             dirCurIndex = rng;
             currentDir = String(dirName);
@@ -727,7 +732,7 @@ bool startTrack(FileStrategy fileStrategy, String request)
     { //This request will disrupt the random history and immediatly create a new node at the end of the random history list
       // playMode = SHUFFLE_ALL; 
       // mainMenu[2].enable(); //Reenable loop # control
-      // uint32_t rng = random(numberOfFiles-1);
+      // uint32_t rng = RNG(numberOfFiles-1);
       // randFileList.add(rng);
       // randIndex = randFileList.size() == 0 ? 0 : randFileList.size()-1;
       // filePath = GetPathFromManifest(rng);
