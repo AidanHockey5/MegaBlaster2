@@ -536,7 +536,7 @@ void findTracksOnRoot()
 
 int RNG(int lower, int upper)
 {
-  return (trngGetRandomNumber() % (upper - lower + 1)) + lower;
+  return (trngGetRandomNumber() % (upper - lower)) + lower;
 }
 
 File getFileFromVwdIndex(uint32_t index)
