@@ -295,7 +295,7 @@ VGMEngineState VGMEngineClass::play()
             dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
             {
-                uint8_t data = ram.ReadByte(pcmBufferPosition++);
+                uint8_t data = ram.ReadByte(dacStreamBufPos++);
                 // check if channel 6 is enabled, since this is a DAC write
                 if (ym2612CHControl[0x06])
                 {
