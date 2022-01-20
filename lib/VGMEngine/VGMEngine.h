@@ -68,6 +68,7 @@ public:
     bool sn76489CHControl[4] = {true, true, true, true};
     //Keeps track of the currently latched channel so we can ignore writes if disabled
     uint8_t sn76489Latched = 0;
+    bool isSyncToneEnabled = false; //Should a test tone at the start of each VGM be played? This is to help people sync individual audio tracks for things like oscilloscope views.
     VGMEngineState state = IDLE;
     bool resetISR = false;
     bool isBusy = false;
@@ -111,6 +112,7 @@ private:
     void chipSetup();
     bool storePCM(bool skip = false);
     bool topUp();
+    void playTestTones();
     uint16_t parseVGM();
 };
 

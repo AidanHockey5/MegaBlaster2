@@ -3,7 +3,9 @@
 #include "Bus.h"
 #include "SpinSleep.h"
 #include "clocks.h"
+#include "Voice.h"
 
+#define mask(s) (~(~0<<s))
 
 class YM2612
 {
@@ -14,6 +16,13 @@ public:
     void setClock(uint32_t frq);
     void setYMTimerA(uint16_t value); //10 bit timer. Reg 0x24,0x25. Frq = (0x400 - TMRA) × 18.77µs
     void clearYMTimerA(); 
+    void SetVoice(Voice v);
+    void KeyOn(byte key, byte slot);
+    void KeyOff(byte slot);
+    float NoteToFrequency(uint8_t note);
+    void SetFrequency(uint16_t frequency, uint8_t slot);
+    void TestToneOn(bool channelControl[8]);
+    void TestToneOff();
     ~YM2612();
 private:
     //ChipClock* clk;

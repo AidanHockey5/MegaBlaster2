@@ -67,10 +67,35 @@ bool VGMEngineClass::begin(File *f)
     dacSampleCountDown = 0;
     MegaStream_Reset(&stream);
     load();
+    if(isSyncToneEnabled)
+    {
+        playTestTones();
+    }
     state = PLAYING;
     ready = true;
     return true;
 }
+
+void VGMEngineClass::playTestTones()
+{
+    ym2612->SetVoice(testVoice);
+    for(int i = 0; i < 3; i++)
+    {
+        //TODO: SN76489
+        ym2612->TestToneOn(ym2612CHControl);
+        sn76489->TestToneOn(sn76489CHControl);
+        delay(250);
+        ym2612->TestToneOff();
+        sn76489->TestToneOff(sn76489CHControl);
+        delay(250);
+    }
+
+    delay(250);
+
+    sn76489->reset();
+    ym2612->reset();
+}
+
 
 void VGMEngineClass::resetDataBlocks()
 {
@@ -297,7 +322,7 @@ VGMEngineState VGMEngineClass::play()
             {
                 uint8_t data = ram.ReadByte(dacStreamBufPos++);
                 // check if channel 6 is enabled, since this is a DAC write
-                if (ym2612CHControl[0x06])
+                if (ym2612CHControl[0x05])
                 {
                     ym2612->write(0x2A, data, 0);
                 }
@@ -466,7 +491,7 @@ uint16_t VGMEngineClass::parseVGM()
             {
                 uint8_t data = ram.ReadByte(pcmBufferPosition++);
                 // check if channel 6 is enabled, since this is a DAC write
-                if (ym2612CHControl[0x06])
+                if (ym2612CHControl[0x05])
                 {
                     ym2612->write(0x2A, data, 0);
                 }

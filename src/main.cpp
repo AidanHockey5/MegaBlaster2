@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.26"
+#define FIRMWARE_VERSION "1.27"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -156,6 +156,11 @@ TOGGLE(VGMEngine.loopOneOffs, setLoopOneOff, "Loop One-offs: ", doNothing, noEve
     ,VALUE("OFF",false,doNothing,noEvent)
 );
 
+TOGGLE(VGMEngine.isSyncToneEnabled, setSyncToneToggle, "Sync-tone: ", doNothing, noEvent, noStyle
+    ,VALUE("ON",true,doNothing,noEvent)
+    ,VALUE("OFF",false,doNothing,noEvent)
+);
+
 TOGGLE(VGMEngine.ym2612CHControl[0x00], setYM2612CH1, "FM CH1: ", doNothing, noEvent, noStyle
     ,VALUE("ON",true,doNothing,noEvent)
     ,VALUE("OFF",false,doNothing,noEvent)
@@ -171,17 +176,17 @@ TOGGLE(VGMEngine.ym2612CHControl[0x02], setYM2612CH3, "FM CH3: ", doNothing, noE
     ,VALUE("OFF",false,doNothing,noEvent)
 );
 
-TOGGLE(VGMEngine.ym2612CHControl[0x04], setYM2612CH4, "FM CH4: ", doNothing, noEvent, noStyle
+TOGGLE(VGMEngine.ym2612CHControl[0x03], setYM2612CH4, "FM CH4: ", doNothing, noEvent, noStyle //was this 0x04 for a reason or just a typo?
     ,VALUE("ON",true,doNothing,noEvent)
     ,VALUE("OFF",false,doNothing,noEvent)
 );
 
-TOGGLE(VGMEngine.ym2612CHControl[0x05], setYM2612CH5, "FM CH5: ", doNothing, noEvent, noStyle
+TOGGLE(VGMEngine.ym2612CHControl[0x04], setYM2612CH5, "FM CH5: ", doNothing, noEvent, noStyle
     ,VALUE("ON",true,doNothing,noEvent)
     ,VALUE("OFF",false,doNothing,noEvent)
 );
 
-TOGGLE(VGMEngine.ym2612CHControl[0x06], setYM2612CH6, "FM CH6: ", doNothing, noEvent, noStyle
+TOGGLE(VGMEngine.ym2612CHControl[0x05], setYM2612CH6, "FM CH6: ", doNothing, noEvent, noStyle
     ,VALUE("ON",true,doNothing,noEvent)
     ,VALUE("OFF",false,doNothing,noEvent)
 );
@@ -226,6 +231,7 @@ MENU(mainMenu,"Main menu",doNothing,noEvent,wrapStyle
   ,FIELD(VGMEngine.maxLoops,"Loops: ","",1,255,1,10,doNothing,noEvent,noStyle)
   ,SUBMENU(setLoopOneOff)
   ,SUBMENU(channelControl)
+  ,SUBMENU(setSyncToneToggle)
   //,EXIT("<Back")
 );
 
