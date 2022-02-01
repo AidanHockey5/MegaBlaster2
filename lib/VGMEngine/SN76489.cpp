@@ -1,3 +1,4 @@
+//Feat. Kunoichi PSG fixes https://git.agiri.ninja/natalie/megagrrl/-/commit/33cfe2fa5d3d8d72bca1c528f5ab86dcdce07068
 #include "SN76489.h"
 
 SN76489::SN76489(Bus* _bus, uint8_t _WE)
@@ -15,28 +16,101 @@ void SN76489::setClock(uint32_t frq)
 
 void SN76489::reset()
 {
-    writeRaw(0x9F);
-    writeRaw(0xBF);
-    writeRaw(0xDF);
-    writeRaw(0xFF);
+    dcsg_latched_ch = 0;
+    for (uint8_t i=0;i<3;i++) dcsg_freq[i] = 0;
+    for (uint8_t i=0;i<4;i++) 
+    {
+        writeRaw(0x80 | (i<<5) | 0x10 | 0xf); //full atten
+        if (i != 3) 
+        { //set freq to 0
+            writeRaw(0x80 | (i<<5));
+            writeRaw(0);
+        }
+    }
 }
 
 void SN76489::write(uint8_t data)
 {
-    if((data & 0x80) == 0)
+    if (fixDcsgFrequency) 
     {
-        if((psgFrqLowByte & 0x0F) == 0)
-        {
-            if((data & 0x3F) == 0)
-            psgFrqLowByte |= 1;
+        if ((data & 0x80) == 0) 
+        { //ch 1~3 frequency high byte write
+            //note: whether or not dcsg_latched_ch is actually still in the latch on the chip (ch3 updates might blow it away) doesn't matter, because we always rewrite the low byte anyway. it's what's latched from *our* POV
+            dcsg_freq[dcsg_latched_ch] = (dcsg_freq[dcsg_latched_ch] & 0b1111) | ((data & 0b111111) << 4);
+            //write both registers now
+            if (dcsg_latched_ch == 2) 
+            { //ch3
+                writeDcsgCh3Freq();
+            } 
+            else 
+            {
+                uint8_t low = 0x80 | (dcsg_latched_ch<<5) | (dcsg_freq[dcsg_latched_ch] & 0b1111);
+                if (dcsg_freq[dcsg_latched_ch] == 0) low |= 1;
+                writeRaw(low);
+                writeRaw((dcsg_freq[dcsg_latched_ch] >> 4) & 0b111111);
+            }
+        } 
+        else if ((data & 0b10010000) == 0b10000000 && (data&0b01100000)>>5 != 3) 
+        { //ch 1~3 frequency low byte write
+            dcsg_latched_ch = (data>>5)&3;
+            dcsg_freq[dcsg_latched_ch] = (dcsg_freq[dcsg_latched_ch] & 0b1111110000) | (data & 0b1111);
+            uint8_t val = data;
+            if (dcsg_freq[dcsg_latched_ch] == 0) 
+            {
+                val |= 1;
+            }
+            writeRaw(val);
+        } 
+        else 
+        { //attenuation or noise ch control write
+            if ((data & 0b10010000) == 0b10010000) 
+            { //attenuation
+                uint8_t ch = (data>>5)&0b00000011;
+                dcsgAttenuation[ch] = data;
+                //data = filterDcsgAttenWrite(data);
+                //data |= 0b00001111; //if we haven't reached the first wait, force full attenuation
+                if (ch == 2)
+                {
+                    //when ch 3 atten is updated, we also need to write frequency again. this is due to the periodic noise fix.
+                    //TODO: this would be better if it only does it if actually transitioning in or out of mute, rather than on every atten update
+                    writeDcsgCh3Freq();
+                }
+            } 
+            else if ((data & 0b11110000) == 0b11100000) 
+            { //noise control
+                dcsgNoisePeriodic = (data & 0b00000100) == 0; //FB
+                dcsgNoiseSourceCh3 = (data & 0b00000011) == 0b00000011; //NF0, NF1
+                //periodic noise fix: update ch3 frequency when noise control settings change
+                //TODO: only update it when it matters :P
+                writeDcsgCh3Freq();
+            }
+            writeRaw(data);
         }
-        writeRaw(psgFrqLowByte);
-        writeRaw(data);
+    } 
+    else 
+    { //not fixing dcsg frequency
+        writeRaw(data); //just write it normally
     }
-    else if((data & 0x90) == 0x80 && (data & 0x60)>>5 != 3)
-        psgFrqLowByte = data;
-    else
-        writeRaw(data);
+}
+
+void SN76489::writeDcsgCh3Freq()
+{
+    uint32_t freq = dcsg_freq[2];
+    //if the fix is enabled, and dcsg noise is set to "periodic" mode, and it gets its freq from ch3, and ch3 is muted, then adjust ch3 freq
+    if (fixDcsgPeriodic && dcsgNoisePeriodic && dcsgNoiseSourceCh3 && dcsgAttenuation[2] == 0b11011111) {
+        //increase the value by 6.25%, which actually decreases output freq, because dcsg freq regs are "upside down"
+        freq *= 10625;
+        freq /= 10000;
+    }
+
+    if (freq == 0) freq = 1;
+    //first byte
+    uint8_t out = 0b11000000 | (freq & 0b00001111);
+    writeRaw(out);
+
+    //second byte
+    out = (freq >> 4) & 0b00111111; //mask is needed to make sure overflows don't end up in dcsg bit 7
+    writeRaw(out);
 }
 
 void SN76489::writeRaw(uint8_t data)

@@ -22,6 +22,8 @@ public:
     void TestToneOn(bool channelControl[4]);
     void TestToneOff(bool channelControl[4]);
     bool UpdateSquarePitch(uint8_t voice);
+
+    void writeDcsgCh3Freq();
 private:
     //ChipClock* clk;
     uint32_t clkfrq = NTSC_COLORBURST;
@@ -34,6 +36,15 @@ private:
     const int noiseCh = 3;
     const int MAX_CHANNELS_PSG = 3;
     unsigned char psgFrqLowByte = 0;
+
+    bool dcsgNoisePeriodic = false;
+    bool dcsgNoiseSourceCh3 = false;
+    uint32_t dcsg_freq[3] = {0,0,0};
+    uint8_t dcsgAttenuation[4] = {0b10011111, 0b10111111, 0b11011111, 0b11111111};
+    uint8_t dcsg_latched_ch = 0;
+    bool fixDcsgFrequency = true;
+    bool fixDcsgPeriodic = true;
+
     void writeRaw(uint8_t data);
 };
 

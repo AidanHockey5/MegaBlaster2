@@ -2,7 +2,7 @@
 //CHIP SELECT FEATURES MANUALLY ADJUSTED IN SDFAT LIB (in SdSpiDriver.h). MUST USE LIB INCLUDED WITH REPO!!!
 
 #define BOOTLOADER_VERSION "1.0"
-#define FIRMWARE_VERSION "1.27"
+#define FIRMWARE_VERSION "1.28"
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -37,7 +37,7 @@ extern "C" {
 #define DEBUG_LED A4
 bool commandFailed = false;
 uint8_t failedCmd = 0x00;
-#define DISABLE_IRQ_TEST false
+#define DISABLE_IRQ_TEST true
 
 //Structs
 enum FileStrategy {FIRST_START, NEXT, PREV, RND, REQUEST};
