@@ -411,7 +411,11 @@ uint16_t VGMEngineClass::parseVGM()
                 // check for an operator/channel key on/off write
                 if (addr == 0x28)
                 {
-                    uint8_t channel = (data & 0x07);
+                    const uint8_t chMap[7] = {0, 1, 2, 0xFF, 3, 4, 5}; //Yamaha doesn't know how to count in binary. Check register 0x28 key-on map.
+                    uint8_t channel = chMap[(data & 0x07)]; //Mask out 0x28 register to get key-on data
+                    
+                    if(channel == 0xFF) //Invalid channel
+                        break;
                     // if the channel is disabled then make it silent (force a key-off)
                     if (!ym2612CHControl[channel])
                     {

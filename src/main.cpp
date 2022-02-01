@@ -37,7 +37,7 @@ extern "C" {
 #define DEBUG_LED A4
 bool commandFailed = false;
 uint8_t failedCmd = 0x00;
-#define DISABLE_IRQ_TEST true
+#define DISABLE_IRQ_TEST false
 
 //Structs
 enum FileStrategy {FIRST_START, NEXT, PREV, RND, REQUEST};
