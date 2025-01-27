@@ -62,6 +62,7 @@ bool VGMEngineClass::begin(File *f)
     storePCM();
     pcmBufferPosition = 0;
     waitSamples = 0;
+    firstWait = true;
     loopCount = 0;
     badCommandCount = 0;
     dacSampleCountDown = 0;
@@ -338,7 +339,16 @@ VGMEngineState VGMEngineClass::play()
         while(waitSamples <= 0)
         {
             isBusy = true;
-            waitSamples += parseVGM();
+            uint16_t smpls = parseVGM();
+            if (firstWait && smpls)
+            {
+                waitSamples = smpls;
+                firstWait = false;
+            }
+            else
+            {
+                waitSamples += smpls;
+            }
         }
 
         isBusy = false;
