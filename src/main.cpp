@@ -1232,7 +1232,8 @@ void loop()
   }
 
   //UI
-  if (nav.changed(0) && menuState == IN_MENU) {//only draw if menu changed for gfx device
+  if (nav.changed(0) && menuState == IN_MENU) 
+  {//only draw if menu changed for gfx device
     //change checking leaves more time for other tasks
     u8g2.firstPage();
     do nav.doOutput(); while(u8g2.nextPage());

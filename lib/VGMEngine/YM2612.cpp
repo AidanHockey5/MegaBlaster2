@@ -51,7 +51,9 @@ void YM2612::write(uint8_t addr, uint8_t data, bool a1)
     delayMicroseconds(2);
     REG_PORT_OUTSET1 = PORT_PB15; //WR HIGH
     REG_PORT_OUTSET1 = PORT_PB16; //CS HIGH
-    if(addr >= 0x21 && addr <= 0x9E) //Twww YM3438 application manual timings
+    if(addr == 0x2A) //DAC data. Streamed at up to 44.1KHz (22.68us/sample), so the full Twww wait cannot be afforded here
+        delayMicroseconds(2);
+    else if(addr >= 0x21 && addr <= 0x9E) //Twww YM3438 application manual timings
         delayMicroseconds(11); //~83 cycles
     else if(addr >= 0xA0 && addr <= 0xB6)
         delayMicroseconds(6); //~47 cycles

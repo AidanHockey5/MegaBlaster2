@@ -63,6 +63,7 @@ bool VGMEngineClass::begin(File *f)
     pcmBufferPosition = 0;
     waitSamples = 0;
     loopCount = 0;
+    firstWait = true;
     badCommandCount = 0;
     dacSampleCountDown = 0;
     MegaStream_Reset(&stream);
@@ -317,6 +318,11 @@ VGMEngineState VGMEngineClass::play()
         load(); 
         while(dacSampleCountDown <= 0)
         {
+            if(activeDacStreamBlock == 0xFF) //No stream is running. 0xFF is not a valid dataBlocks index, so never dereference it
+            {
+                dacSampleCountDown = 1;
+                break;
+            }
             dacSampleReady = false;
             if(dacStreamBufPos+1 < dataBlocks[activeDacStreamBlock].DataStart+dataBlocks[activeDacStreamBlock].DataLength)
             {
@@ -338,7 +344,16 @@ VGMEngineState VGMEngineClass::play()
         while(waitSamples <= 0)
         {
             isBusy = true;
-            waitSamples += parseVGM();
+            uint16_t smpls = parseVGM();
+            if (firstWait && smpls)
+            {
+                waitSamples = smpls;
+                firstWait = false;
+            }
+            else
+            {
+                waitSamples += smpls;
+            }
         }
 
         isBusy = false;
@@ -427,8 +442,13 @@ uint16_t VGMEngineClass::parseVGM()
                 break;
             }
             case 0x53:
+            {
                 // part 2 writes don't deal with operator key on/off operations
-                ym2612->write(readBufOne(), readBufOne(), 1);
+                // Read into locals first: argument evaluation order is unspecified in C++, and readBufOne() has side effects
+                uint8_t addr = readBufOne();
+                uint8_t data = readBufOne();
+                ym2612->write(addr, data, 1);
+            }
             break;
             case 0x61:
                 return readBuf16();

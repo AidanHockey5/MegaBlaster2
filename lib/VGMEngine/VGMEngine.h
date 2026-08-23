@@ -80,6 +80,7 @@ private:
     static const uint32_t VGM_BUF_SIZE = 16384;
     volatile int32_t waitSamples = 0;
     volatile bool ready = false;
+    bool firstWait = true;
     bool bufLock = false;
     uint16_t badCommandCount = 0;
     uint32_t pcmBufferPosition = 0;
@@ -97,8 +98,8 @@ private:
     uint32_t dacStreamBufPos;
     uint32_t dacStreamCurLength;
     int32_t dacSampleReady = false;
-    uint8_t activeDacStreamBlock;
-    int32_t dacSampleCountDown;
+    volatile uint8_t activeDacStreamBlock; //Written in play(), read in the tickDacStream() ISR
+    volatile int32_t dacSampleCountDown;   //Decremented in the tickDacStream() ISR
     bool isOneOff = false; //This track doesn't have a loop
 
     uint8_t readBufOne(); 
