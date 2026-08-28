@@ -79,6 +79,7 @@ private:
     File* file;
     static const uint32_t VGM_BUF_SIZE = 16384;
     volatile int32_t waitSamples = 0;
+    bool firstWait = true;
     volatile bool ready = false;
     bool firstWait = true;
     bool bufLock = false;

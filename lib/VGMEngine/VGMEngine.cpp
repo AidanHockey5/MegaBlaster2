@@ -62,6 +62,7 @@ bool VGMEngineClass::begin(File *f)
     storePCM();
     pcmBufferPosition = 0;
     waitSamples = 0;
+    firstWait = true;
     loopCount = 0;
     firstWait = true;
     badCommandCount = 0;
